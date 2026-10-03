@@ -21,9 +21,8 @@ namespace {
 constexpr const char* kAlgorithmName = "ML-KEM-768";
 constexpr const char* kUnavailableMessage = "ML-KEM not available. Requires OpenSSL 3.5+.";
 
-CryptoResult unavailable(std::string* lastError) noexcept {
-    *lastError = kUnavailableMessage;
-    return CryptoResult::failure(detail::kErrorCode, kUnavailableMessage);
+CryptoResult unavailable() noexcept {
+    return detail::unavailableFailure(kUnavailableMessage);
 }
 
 /// Encode a key as DER into out. False on failure.
@@ -62,12 +61,12 @@ const char* MlKem768Module::algorithmName() const noexcept {
     return "ML-KEM-768 (FIPS 203)";
 }
 
-const std::string& MlKem768Module::getLastError() const noexcept {
-    return lastError_;
+std::string MlKem768Module::getLastError() const noexcept {
+    return lastErrorSnapshot();
 }
 
 void MlKem768Module::clearError() noexcept {
-    lastError_.clear();
+    clearLastError();
     ERR_clear_error();
 }
 
@@ -81,24 +80,26 @@ CryptoResult MlKem768Module::generateKeyPair(std::vector<uint8_t>& publicKey,
     // when this OpenSSL build has no ML-KEM support.
     EvpPkeyCtxPtr keyContext = makePkeyCtxFromName(kAlgorithmName);
     if (!keyContext) {
-        return unavailable(&lastError_);
+        return storeFailure(unavailable());
     }
     if (EVP_PKEY_keygen_init(keyContext.get()) <= 0) {
-        return detail::openSslFailure("ML-KEM-768: key generation initialization failed",
-                                      &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: key generation initialization failed"));
     }
 
     EVP_PKEY* rawKey = nullptr;
     if (EVP_PKEY_keygen(keyContext.get(), &rawKey) <= 0) {
-        return detail::openSslFailure("ML-KEM-768: key generation failed", &lastError_);
+        return storeFailure(detail::openSslFailure("ML-KEM-768: key generation failed"));
     }
     EvpPkeyPtr keyPair = wrapPkey(rawKey);
 
     if (!exportPublicDer(keyPair.get(), publicKey)) {
-        return detail::openSslFailure("ML-KEM-768: public key export failed", &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: public key export failed"));
     }
     if (!exportPrivateDer(keyPair.get(), secretKey)) {
-        return detail::openSslFailure("ML-KEM-768: secret key export failed", &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: secret key export failed"));
     }
     return CryptoResult::success();
 }
@@ -111,40 +112,42 @@ CryptoResult MlKem768Module::encapsulate(const std::vector<uint8_t>& publicKey,
     sharedSecret.clear();
 
     if (publicKey.empty()) {
-        return detail::paramFailure("ML-KEM-768: public key must not be empty", &lastError_);
+        return storeFailure(
+            detail::paramFailure("ML-KEM-768: public key must not be empty"));
     }
     if (publicKey.size() > static_cast<std::size_t>(LONG_MAX)) {
-        return detail::paramFailure("ML-KEM-768: public key too large", &lastError_);
+        return storeFailure(detail::paramFailure("ML-KEM-768: public key too large"));
     }
 
     const unsigned char* cursor = publicKey.data();
     EVP_PKEY* rawKey = d2i_PUBKEY(nullptr, &cursor, static_cast<long>(publicKey.size()));
     if (rawKey == nullptr) {
-        return detail::openSslFailure("ML-KEM-768: failed to parse public key", &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: failed to parse public key"));
     }
     EvpPkeyPtr parsedPublicKey = wrapPkey(rawKey);
 
     EvpPkeyCtxPtr keyContext = makePkeyCtx(parsedPublicKey.get());
     if (!keyContext) {
-        return detail::openSslFailure("ML-KEM-768: EVP_PKEY_CTX_new failed", &lastError_);
+        return storeFailure(detail::openSslFailure("ML-KEM-768: EVP_PKEY_CTX_new failed"));
     }
     if (EVP_PKEY_encapsulate_init(keyContext.get(), nullptr) != 1) {
-        return detail::openSslFailure("ML-KEM-768: encapsulation initialization failed",
-                                      &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: encapsulation initialization failed"));
     }
 
     std::size_t ciphertextLength = 0;
     std::size_t sharedSecretLength = 0;
     if (EVP_PKEY_encapsulate(keyContext.get(), nullptr, &ciphertextLength,
                              nullptr, &sharedSecretLength) != 1) {
-        return detail::openSslFailure("ML-KEM-768: determining output sizes failed",
-                                      &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: determining output sizes failed"));
     }
     ciphertext.resize(ciphertextLength);
     sharedSecret.resize(sharedSecretLength);
     if (EVP_PKEY_encapsulate(keyContext.get(), ciphertext.data(), &ciphertextLength,
                              sharedSecret.data(), &sharedSecretLength) != 1) {
-        return detail::openSslFailure("ML-KEM-768: encapsulation failed", &lastError_);
+        return storeFailure(detail::openSslFailure("ML-KEM-768: encapsulation failed"));
     }
     ciphertext.resize(ciphertextLength);
     sharedSecret.resize(sharedSecretLength);
@@ -158,42 +161,45 @@ CryptoResult MlKem768Module::decapsulate(const std::vector<uint8_t>& ciphertext,
     sharedSecret.clear();
 
     if (ciphertext.empty()) {
-        return detail::paramFailure("ML-KEM-768: ciphertext must not be empty", &lastError_);
+        return storeFailure(
+            detail::paramFailure("ML-KEM-768: ciphertext must not be empty"));
     }
     if (secretKey.empty()) {
-        return detail::paramFailure("ML-KEM-768: secret key must not be empty", &lastError_);
+        return storeFailure(
+            detail::paramFailure("ML-KEM-768: secret key must not be empty"));
     }
     if (secretKey.size() > static_cast<std::size_t>(LONG_MAX)) {
-        return detail::paramFailure("ML-KEM-768: secret key too large", &lastError_);
+        return storeFailure(detail::paramFailure("ML-KEM-768: secret key too large"));
     }
 
     const unsigned char* cursor = secretKey.data();
     EVP_PKEY* rawKey = d2i_PrivateKey(EVP_PKEY_NONE, nullptr, &cursor,
                                       static_cast<long>(secretKey.size()));
     if (rawKey == nullptr) {
-        return detail::openSslFailure("ML-KEM-768: failed to parse secret key", &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: failed to parse secret key"));
     }
     EvpPkeyPtr parsedSecretKey = wrapPkey(rawKey);
 
     EvpPkeyCtxPtr keyContext = makePkeyCtx(parsedSecretKey.get());
     if (!keyContext) {
-        return detail::openSslFailure("ML-KEM-768: EVP_PKEY_CTX_new failed", &lastError_);
+        return storeFailure(detail::openSslFailure("ML-KEM-768: EVP_PKEY_CTX_new failed"));
     }
     if (EVP_PKEY_decapsulate_init(keyContext.get(), nullptr) != 1) {
-        return detail::openSslFailure("ML-KEM-768: decapsulation initialization failed",
-                                      &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: decapsulation initialization failed"));
     }
 
     std::size_t sharedSecretLength = 0;
     if (EVP_PKEY_decapsulate(keyContext.get(), nullptr, &sharedSecretLength,
                              ciphertext.data(), ciphertext.size()) != 1) {
-        return detail::openSslFailure("ML-KEM-768: determining secret size failed",
-                                      &lastError_);
+        return storeFailure(
+            detail::openSslFailure("ML-KEM-768: determining secret size failed"));
     }
     sharedSecret.resize(sharedSecretLength);
     if (EVP_PKEY_decapsulate(keyContext.get(), sharedSecret.data(), &sharedSecretLength,
                              ciphertext.data(), ciphertext.size()) != 1) {
-        return detail::openSslFailure("ML-KEM-768: decapsulation failed", &lastError_);
+        return storeFailure(detail::openSslFailure("ML-KEM-768: decapsulation failed"));
     }
     sharedSecret.resize(sharedSecretLength);
     return CryptoResult::success();

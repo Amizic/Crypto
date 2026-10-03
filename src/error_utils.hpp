@@ -3,6 +3,10 @@
 // ObsidianGuard - src/error_utils.hpp
 // Internal error helpers shared by the module implementations. This header is
 // private to the library and is not installed.
+//
+// Every helper returns a CryptoResult whose code is one of the standard
+// CryptoErrorCode categories; the distinct negative codes are the public
+// contract that lets callers tell failure classes apart.
 
 #include <openssl/err.h>
 
@@ -14,14 +18,10 @@
 namespace ObsidianGuard {
 namespace detail {
 
-constexpr int kErrorCode = -1;
-
-/// Build a CryptoResult::failure from the OpenSSL error queue.
-/// The human readable description comes from
-/// ERR_error_string(ERR_get_error(), nullptr); if the queue is empty the
-/// supplied context string is used on its own. The queue is drained and the
-/// description is stored in *lastError so getLastError() reports it as well.
-inline CryptoResult openSslFailure(std::string context, std::string* lastError) noexcept {
+/// Append the human readable text of the OpenSSL error queue to context and
+/// drain the queue. The queue is thread-local (OpenSSL >= 1.1.0), so this
+/// only ever touches the calling thread's errors.
+inline void appendOpenSslQueue(std::string& context) noexcept {
     const unsigned long errorCode = ERR_get_error();
     if (errorCode != 0UL) {
         context += ": ";
@@ -30,14 +30,40 @@ inline CryptoResult openSslFailure(std::string context, std::string* lastError) 
     while (ERR_get_error() != 0UL) {
         // drain anything else left in the error queue
     }
-    *lastError = context;
-    return CryptoResult::failure(kErrorCode, std::move(context));
 }
 
-/// Build a failure for an invalid argument (no OpenSSL error involved).
-inline CryptoResult paramFailure(std::string message, std::string* lastError) noexcept {
-    *lastError = message;
-    return CryptoResult::failure(kErrorCode, std::move(message));
+/// Failure caused by an invalid argument (no OpenSSL error involved).
+inline CryptoResult paramFailure(std::string message) noexcept {
+    return CryptoResult::failure(static_cast<int>(CryptoErrorCode::InvalidArgument),
+                                 std::move(message));
+}
+
+/// Failure reported by OpenSSL; the queue text is appended when available.
+inline CryptoResult openSslFailure(std::string context) noexcept {
+    appendOpenSslQueue(context);
+    return CryptoResult::failure(static_cast<int>(CryptoErrorCode::OpenSslFailure),
+                                 std::move(context));
+}
+
+/// Authentication or verification failure: a wrong key, nonce (IV), tag or
+/// signature. The OpenSSL queue is drained as well, so a queue entry left by
+/// the failed check still lands in the description.
+inline CryptoResult authFailure(std::string context) noexcept {
+    appendOpenSslQueue(context);
+    return CryptoResult::failure(static_cast<int>(CryptoErrorCode::AuthFailed),
+                                 std::move(context));
+}
+
+/// The requested algorithm is not available in this OpenSSL build.
+inline CryptoResult unavailableFailure(std::string message) noexcept {
+    return CryptoResult::failure(static_cast<int>(CryptoErrorCode::Unavailable),
+                                 std::move(message));
+}
+
+/// Unexpected internal failure (reserved for future use).
+inline CryptoResult internalFailure(std::string message) noexcept {
+    return CryptoResult::failure(static_cast<int>(CryptoErrorCode::Internal),
+                                 std::move(message));
 }
 
 } // namespace detail
