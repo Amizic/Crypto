@@ -20,7 +20,7 @@ public:
     Rsa4096Module() noexcept = default;
 
     const char* algorithmName() const noexcept override;
-    const std::string& getLastError() const noexcept override;
+    std::string getLastError() const noexcept override;
     void clearError() noexcept override;
 
     /// Generate a 4096-bit RSA key pair.

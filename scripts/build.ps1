@@ -7,10 +7,12 @@ tools\openssl-install).
 Usage:
     pwsh -ExecutionPolicy Bypass -File scripts/build.ps1 -Linkage shared
     pwsh -ExecutionPolicy Bypass -File scripts/build.ps1 -Linkage static -Clean
+    pwsh -ExecutionPolicy Bypass -File scripts/build.ps1 -Linkage shared -Test
 #>
 param(
     [ValidateSet("shared", "static")] [string]$Linkage = "shared",
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Test
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +82,13 @@ if ($LASTEXITCODE -ne 0) { throw "cmake configure failed (exit $LASTEXITCODE)" }
 
 & cmake --build $buildDir
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed (exit $LASTEXITCODE)" }
+
+if ($Test) {
+    Write-Host ""
+    Write-Host "Running the ObsidianGuard test suite (ctest)..."
+    & ctest --test-dir $buildDir --output-on-failure
+    if ($LASTEXITCODE -ne 0) { throw "ctest failed (exit $LASTEXITCODE)" }
+}
 
 Write-Host ""
 Write-Host "Build finished: $(Join-Path $buildDir 'bin\usage_example.exe')"

@@ -2,7 +2,8 @@
 
 // ObsidianGuard - crypto_types.hpp
 // ---------------------------------------------------------------------------
-// Common result type and the library import/export macro.
+// Common result type, the standard error code categories, and the library
+// import/export macro.
 //
 // OBSIDIAN_GUARD_API
 //   * building ObsidianGuard as a shared library: OBSIDIAN_GUARD_EXPORTS is defined
@@ -32,10 +33,27 @@
 
 namespace ObsidianGuard {
 
+/// Standard failure categories used as CryptoResult::code.
+///
+/// Every failure reported by the library carries one of these negative
+/// values, so callers can distinguish "the input was wrong" from "the
+/// ciphertext was tampered with" without parsing the message text.
+/// 0 (Success) is the only non-negative value the library ever returns.
+enum class CryptoErrorCode : int {
+    Success         = 0,   ///< no error
+    InvalidArgument = -1,  ///< bad input (wrong size, null key, empty buffer, ...)
+    OpenSslFailure  = -2,  ///< the underlying OpenSSL call failed
+    AuthFailed      = -3,  ///< authentication/verification failed (wrong key, nonce, tag or signature)
+    Unavailable     = -4,  ///< the algorithm is not available in this OpenSSL build
+    Internal        = -5,  ///< unexpected internal failure
+};
+
 /// Result of every crypto operation.
-/// code == 0 means success, a negative code means failure.
+/// code == 0 means success, a negative code means failure. Failure codes are
+/// the CryptoErrorCode categories above (compare with e.g.
+/// `result.code == static_cast<int>(CryptoErrorCode::AuthFailed)`).
 struct OBSIDIAN_GUARD_API CryptoResult {
-    int code = 0;        ///< 0 on success, negative on error.
+    int code = 0;        ///< 0 on success, a negative CryptoErrorCode on error.
     std::string message; ///< human readable error description.
 
     bool ok() const noexcept { return code == 0; }

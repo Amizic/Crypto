@@ -24,7 +24,7 @@ public:
     MlKem768Module() noexcept = default;
 
     const char* algorithmName() const noexcept override;
-    const std::string& getLastError() const noexcept override;
+    std::string getLastError() const noexcept override;
     void clearError() noexcept override;
 
     /// Generate an ML-KEM-768 key pair.

@@ -1,4 +1,4 @@
-# Obsidian Guard Library
+# ObsidianGuard
 
 A professional, modular C++17 cryptography library built on OpenSSL.
 Three modules share one interface and one error model:
@@ -16,6 +16,29 @@ Three modules share one interface and one error model:
 * **No exceptions, no printing, no abort** — every public method returns
   `CryptoResult { int code; std::string message; bool ok(); }` where `0`
   means success and negative values mean failure.
+* **Distinct error codes** — every failure carries one of the standard
+  `CryptoErrorCode` categories below, so callers can tell failure classes
+  apart without parsing message text:
+
+  | `CryptoErrorCode` | Value | Meaning |
+  |---|---|---|
+  | `Success` | `0` | no error |
+  | `InvalidArgument` | `-1` | bad input (wrong size, null key, empty buffer, ...) |
+  | `OpenSslFailure` | `-2` | the underlying OpenSSL call failed |
+  | `AuthFailed` | `-3` | authentication/verification failed (wrong key, nonce (IV), tag or signature) |
+  | `Unavailable` | `-4` | the algorithm is not available in this OpenSSL build |
+  | `Internal` | `-5` | unexpected internal failure (reserved) |
+
+  For example, AES-GCM decryption reports `-1` for a wrong key *size*,
+  `-3` when the tag/ciphertext was tampered with, and RSA verification
+  reports `-3` for a bad signature while unparseable ciphertext yields
+  `-2` — different causes, different codes.
+* **Thread-safe module instances** — all crypto work happens on per-call,
+  thread-local state, so a single module instance can be shared freely
+  between threads. The stored last error is guarded internally and
+  `getLastError()` returns a consistent snapshot by value; concurrent
+  failures are resolved last-writer-wins, while the `CryptoResult` returned
+  by each call is always the exact result of that call.
 * **OpenSSL errors** — every OpenSSL failure is translated into
   `CryptoResult::failure` with the human readable description from
   `ERR_error_string(ERR_get_error(), nullptr)` and is also stored in the
@@ -43,6 +66,10 @@ cmake -S . -B build-static -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LI
 cmake --build build-static
 ```
 
+The `scripts/build.ps1` helper builds with the in-workspace toolchain and can
+run the tests right after: `pwsh -ExecutionPolicy Bypass -File scripts/build.ps1
+-Linkage shared -Test`.
+
 `add_library(ObsidianGuard ...)` is declared without an explicit type, so the
 standard `BUILD_SHARED_LIBS` variable (ON by default) selects shared vs
 static linking.
@@ -53,6 +80,22 @@ library. Run it to exercise all three modules: key generation, encrypt,
 decrypt, sign, verify, KEM encapsulate/decapsulate, plus negative tests that
 show how failures surface through `CryptoResult` and `getLastError()`. It
 ends with `system("pause")` on Windows so the output stays visible.
+
+The test suite (`tests/test_main.cpp`, no external test framework) is built
+and registered with CTest as well:
+
+```bash
+ctest --test-dir build-shared --output-on-failure     # shared build
+ctest --test-dir build-static --output-on-failure     # static build
+```
+
+It covers round trips, every negative path with its exact error code, the
+error-model contract, and multithreaded stress tests that hammer a single
+shared module instance from several threads. When you run
+`obsidianguard_tests.exe` directly in a terminal (or double-click it), it
+pauses at the end so the window stays open while you read the results;
+CTest and redirected runs skip the pause automatically, and setting
+`OBSIDIAN_GUARD_NO_PAUSE=1` forces it off.
 
 ## Getting OpenSSL 3.5+
 
@@ -87,6 +130,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 |---|---|---|
 | `BUILD_SHARED_LIBS` | `ON` | Shared library (`OFF` = static library) |
 | `OBSIDIAN_GUARD_BUILD_EXAMPLES` | `ON` | Build `examples/usage_example.cpp` |
+| `OBSIDIAN_GUARD_BUILD_TESTS` | `ON` | Build `tests/test_main.cpp` and register it with CTest |
 | `OBSIDIAN_GUARD_OPENSSL_STATIC` | `ON` | Define `OPENSSL_STATIC` (needed when OpenSSL is a static library, e.g. vcpkg static triplets) |
 
 ## Project layout
@@ -108,6 +152,8 @@ ObsidianGuard/
 │   └── ml_kem768.cpp
 ├── examples/
 │   └── usage_example.cpp
+├── tests/
+│   └── test_main.cpp        # dependency-free test suite (CTest)
 ├── cmake/
 │   └── ObsidianGuardConfig.cmake.in
 └── scripts/
@@ -118,8 +164,9 @@ ObsidianGuard/
 ## Notes
 
 * ML-KEM-768 requires OpenSSL 3.5+; without it every `MlKem768Module` call
-  fails with `CryptoResult::failure(-1, "ML-KEM not available. Requires
-  OpenSSL 3.5+.")` — the library still builds and runs on older OpenSSL.
+  fails with `CryptoResult::failure(-4, "ML-KEM not available. Requires
+  OpenSSL 3.5+.")` (`CryptoErrorCode::Unavailable`) — the library still
+  builds and runs on older OpenSSL.
 * Keys exchanged with `Rsa4096Module::generateKeyPair()` are returned as
   `EVP_PKEY*` owned by the caller; wrap them with
   `ObsidianGuard::wrapPkey()` (`include/openssl_raii.hpp`) for automatic

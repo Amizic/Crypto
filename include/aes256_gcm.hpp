@@ -19,7 +19,7 @@ public:
     Aes256GcmModule() noexcept = default;
 
     const char* algorithmName() const noexcept override;
-    const std::string& getLastError() const noexcept override;
+    std::string getLastError() const noexcept override;
     void clearError() noexcept override;
 
     /// Generate a random 32-byte AES-256 key.

@@ -6,7 +6,8 @@
 //   * MlKem768Module  : key pair, KEM encapsulate/decapsulate
 //
 // Every call is checked through CryptoResult and, on failure, the stored
-// description is shown through getLastError().
+// description is shown through getLastError(). Failures print the distinct
+// negative CryptoErrorCode category (e.g. -3 AuthFailed), not just -1.
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -29,6 +30,19 @@ namespace {
 
 int gFailureCount = 0;
 
+const char* codeName(int code) {
+    using ObsidianGuard::CryptoErrorCode;
+    switch (static_cast<CryptoErrorCode>(code)) {
+        case CryptoErrorCode::Success:         return "Success";
+        case CryptoErrorCode::InvalidArgument: return "InvalidArgument";
+        case CryptoErrorCode::OpenSslFailure:  return "OpenSslFailure";
+        case CryptoErrorCode::AuthFailed:      return "AuthFailed";
+        case CryptoErrorCode::Unavailable:     return "Unavailable";
+        case CryptoErrorCode::Internal:        return "Internal";
+    }
+    return "Unknown";
+}
+
 void report(const char* label, const ObsidianGuard::CryptoResult& result) {
     std::cout << "  [";
     if (result.ok()) {
@@ -39,7 +53,8 @@ void report(const char* label, const ObsidianGuard::CryptoResult& result) {
     }
     std::cout << label;
     if (!result.ok()) {
-        std::cout << " -> code " << result.code << ": " << result.message;
+        std::cout << " -> code " << result.code << " (" << codeName(result.code)
+                  << "): " << result.message;
     }
     std::cout << '\n';
 }
@@ -123,7 +138,7 @@ void testAes256Gcm() {
         std::cout << "  [FAIL] decryption accepted a corrupted tag\n";
     } else {
         std::cout << "  [ OK ] decryption correctly rejected, code " << result.code
-                  << ": " << result.message << "\n";
+                  << " (" << codeName(result.code) << "): " << result.message << "\n";
         showLastError(module);
     }
     module.clearError();
@@ -183,7 +198,7 @@ void testRsa4096() {
         std::cout << "  [FAIL] verification accepted a corrupted signature\n";
     } else {
         std::cout << "  [ OK ] verification correctly rejected, code " << result.code
-                  << ": " << result.message << "\n";
+                  << " (" << codeName(result.code) << "): " << result.message << "\n";
         showLastError(module);
     }
     module.clearError();
@@ -233,7 +248,8 @@ void testMlKem768() {
         module.decapsulate(corruptedCiphertext, secretKey, rejectedSecret);
     if (!result.ok()) {
         std::cout << "  [ OK ] decapsulation rejected the ciphertext, code "
-                  << result.code << ": " << result.message << "\n";
+                  << result.code << " (" << codeName(result.code) << "): "
+                  << result.message << "\n";
     } else if (rejectedSecret == sharedSecretA) {
         ++gFailureCount;
         std::cout << "  [FAIL] tampered ciphertext yielded the original shared secret\n";

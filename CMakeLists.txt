@@ -14,6 +14,7 @@ project(ObsidianGuard
 # type, so this single switch selects between both variants.
 option(BUILD_SHARED_LIBS "Build ObsidianGuard as a shared library (ON) or static library (OFF)" ON)
 option(OBSIDIAN_GUARD_BUILD_EXAMPLES "Build the usage example executable" ON)
+option(OBSIDIAN_GUARD_BUILD_TESTS "Build the ObsidianGuard test suite (CTest)" ON)
 option(OBSIDIAN_GUARD_OPENSSL_STATIC "Define OPENSSL_STATIC. Required when OpenSSL is available as a static library (e.g. vcpkg x64-*-static triplets)" ON)
 
 # ---------------------------------------------------------------------------
@@ -83,6 +84,27 @@ if(MINGW AND BUILD_SHARED_LIBS)
     target_link_options(ObsidianGuard PRIVATE "LINKER:--exclude-libs,ALL")
 endif()
 
+# Copy the MinGW runtime DLLs next to an executable so it runs without extra
+# PATH configuration.
+function(obsidianguard_copy_mingw_runtime target)
+    if(NOT MINGW)
+        return()
+    endif()
+    get_filename_component(_OBSIDIAN_GUARD_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS)
+    foreach(_runtimeDll IN ITEMS libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll)
+        if(EXISTS "${_OBSIDIAN_GUARD_MINGW_BIN_DIR}/${_runtimeDll}")
+            list(APPEND _OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS "${_OBSIDIAN_GUARD_MINGW_BIN_DIR}/${_runtimeDll}")
+        endif()
+    endforeach()
+    if(_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS}
+                    $<TARGET_FILE_DIR:${target}>
+            COMMENT "Copying MinGW runtime DLLs next to ${target}")
+    endif()
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Example
 # ---------------------------------------------------------------------------
@@ -92,24 +114,29 @@ if(OBSIDIAN_GUARD_BUILD_EXAMPLES)
     set_target_properties(usage_example PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
+    obsidianguard_copy_mingw_runtime(usage_example)
+endif()
 
-    if(MINGW)
-        # Copy the MinGW runtime DLLs next to the executable so it runs
-        # without extra PATH configuration.
-        get_filename_component(_OBSIDIAN_GUARD_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-        set(_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS)
-        foreach(_runtimeDll IN ITEMS libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll)
-            if(EXISTS "${_OBSIDIAN_GUARD_MINGW_BIN_DIR}/${_runtimeDll}")
-                list(APPEND _OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS "${_OBSIDIAN_GUARD_MINGW_BIN_DIR}/${_runtimeDll}")
-            endif()
-        endforeach()
-        if(_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS)
-            add_custom_command(TARGET usage_example POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS}
-                        $<TARGET_FILE_DIR:usage_example>
-                COMMENT "Copying MinGW runtime DLLs next to usage_example.exe")
-        endif()
-    endif()
+# ---------------------------------------------------------------------------
+# Tests (CTest)
+# ---------------------------------------------------------------------------
+include(CTest)
+if(OBSIDIAN_GUARD_BUILD_TESTS AND BUILD_TESTING)
+    add_executable(obsidianguard_tests tests/test_main.cpp)
+    target_link_libraries(obsidianguard_tests PRIVATE ObsidianGuard)
+    set_target_properties(obsidianguard_tests PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    obsidianguard_copy_mingw_runtime(obsidianguard_tests)
+
+    add_test(NAME ObsidianGuardTests COMMAND obsidianguard_tests)
+    # RSA-4096 key generation is intentionally slow; be generous on CI.
+    # The test binary pauses at the end when run interactively; disable the
+    # pause under CTest so automated runs never wait for a keypress.
+    set_tests_properties(ObsidianGuardTests PROPERTIES
+        TIMEOUT 600
+        ENVIRONMENT "OBSIDIAN_GUARD_NO_PAUSE=1"
+    )
 endif()
 
 # ---------------------------------------------------------------------------
