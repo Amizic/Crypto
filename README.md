@@ -1,4 +1,4 @@
-# ObsidianGuard Library
+# Obsidian Guard Library
 
 A professional, modular C++17 cryptography library built on OpenSSL.
 Three modules share one interface and one error model:
