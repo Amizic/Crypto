@@ -9,17 +9,17 @@
 // The class is stateless (keys are passed in per call), so it is trivially
 // thread-safe: any number of threads may share one instance concurrently.
 // Every method returns 0 on success or a negative return code on failure.
-#ifndef OBSIDIAN_GUARD_RSA4096_HPP
-#define OBSIDIAN_GUARD_RSA4096_HPP
+#ifndef CRYPTO_RSA4096_HPP
+#define CRYPTO_RSA4096_HPP
 
 // DLL import/export macro (Windows).
-#ifndef OBSIDIAN_GUARD_API
-    #ifdef OBSIDIAN_GUARD_STATIC
-        #define OBSIDIAN_GUARD_API
-    #elif defined(OBSIDIAN_GUARD_EXPORTS)
-        #define OBSIDIAN_GUARD_API __declspec(dllexport)
+#ifndef CRYPTO_API
+    #ifdef CRYPTO_STATIC
+        #define CRYPTO_API
+    #elif defined(CRYPTO_EXPORTS)
+        #define CRYPTO_API __declspec(dllexport)
     #else
-        #define OBSIDIAN_GUARD_API __declspec(dllimport)
+        #define CRYPTO_API __declspec(dllimport)
     #endif
 #endif
 
@@ -32,9 +32,9 @@
 
 #include "OpensslRaii.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 
-class OBSIDIAN_GUARD_API Rsa4096 {
+class CRYPTO_API Rsa4096 {
 public:
     static constexpr int kBits = 4096;
     static constexpr std::size_t kModulusSize = kBits / 8;                  // 512 bytes
@@ -47,7 +47,7 @@ public:
     static constexpr int kErrAuth           = -3;  // tampered data / wrong key
     static constexpr int kErrUnavailable    = -4;  // algorithm unavailable at runtime
     static constexpr int kErrInternal       = -5;  // unexpected internal failure
-    static constexpr int kErrFile           = -6;  // file I/O error (parity with ObsidianGuardLite)
+    static constexpr int kErrFile           = -6;  // file I/O error (parity with CryptoLite)
 
     /// Human readable algorithm identifier ("RSA-4096 (OAEP-SHA256 / PSS-SHA256)").
     const char* algorithmName() const noexcept;
@@ -55,7 +55,7 @@ public:
     /// Generate a 4096-bit RSA key pair.
     /// On success *outputKey points to a new EVP_PKEY; the caller takes
     /// ownership and must release it with EVP_PKEY_free() — easiest via
-    /// ObsidianGuard::wrapPkey() (OpensslRaii.hpp).
+    /// Crypto::wrapPkey() (OpensslRaii.hpp).
     int generateKeyPair(EVP_PKEY** outputKey) noexcept;
 
     /// Encrypt with the public key (OAEP, SHA-256).
@@ -82,7 +82,7 @@ public:
     // ---- key persistence (PEM / DER, in memory) ---------------------------
     // Save/load keys so they can be stored to disk or sent over a wire.
     // Loaded keys are returned as a new EVP_PKEY* owned by the caller
-    // (wrap with ObsidianGuard::wrapPkey()).
+    // (wrap with Crypto::wrapPkey()).
     int savePublicKeyPem(EVP_PKEY* key, std::string& pem) noexcept;
     int loadPublicKeyPem(const std::string& pem, EVP_PKEY** outputKey) noexcept;
     int savePrivateKeyPem(EVP_PKEY* key, std::string& pem) noexcept;
@@ -93,6 +93,6 @@ public:
     int loadPrivateKeyDer(const std::vector<uint8_t>& der, EVP_PKEY** outputKey) noexcept;
 };
 
-} // namespace ObsidianGuard
+} // namespace Crypto
 
-#endif // OBSIDIAN_GUARD_RSA4096_HPP
+#endif // CRYPTO_RSA4096_HPP

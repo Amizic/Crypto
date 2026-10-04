@@ -1,7 +1,7 @@
 #pragma once
 
-// ObsidianGuard - OpensslRaii.hpp
-// Centralized RAII wrappers for every OpenSSL resource used by ObsidianGuard.
+// Crypto - OpensslRaii.hpp
+// Centralized RAII wrappers for every OpenSSL resource used by Crypto.
 // All OpenSSL pointers are owned by std::unique_ptr with the matching
 // *_free() function as deleter; no manual frees exist anywhere in the
 // library. Use these factories (or wrapPkey for keys returned by
@@ -11,7 +11,7 @@
 
 #include <openssl/evp.h>
 
-namespace ObsidianGuard {
+namespace Crypto {
 
 using EvpCipherCtxPtr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
 using EvpMdCtxPtr     = std::unique_ptr<EVP_MD_CTX,     decltype(&EVP_MD_CTX_free)>;
@@ -50,4 +50,4 @@ inline EvpPkeyPtr wrapPkey(EVP_PKEY* key) noexcept {
     return EvpPkeyPtr(key, &EVP_PKEY_free);
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

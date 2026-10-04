@@ -1,4 +1,4 @@
-// ObsidianGuard - src/MlKem768.cpp
+// Crypto - src/MlKem768.cpp
 // ML-KEM-768 (FIPS 203) post-quantum key encapsulation.
 // Requires OpenSSL 3.5 or newer with ML-KEM support.
 
@@ -13,7 +13,7 @@
 
 #include "OpensslRaii.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 namespace {
 
 /// Encode a key as DER into out. False on failure.
@@ -175,4 +175,4 @@ int MlKem768::decapsulate(const std::vector<uint8_t>& ciphertext,
     return kOk;
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

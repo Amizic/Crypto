@@ -1,4 +1,4 @@
-// ObsidianGuard - src/Rsa4096.cpp
+// Crypto - src/Rsa4096.cpp
 // RSA-4096: OAEP-SHA256 encryption and PSS-SHA256 signatures.
 
 #include "Rsa4096.hpp"
@@ -15,7 +15,7 @@
 
 #include "OpensslRaii.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 namespace {
 
 /// Shared OAEP configuration for encryption and decryption: OAEP padding
@@ -404,4 +404,4 @@ int Rsa4096::loadPrivateKeyDer(const std::vector<uint8_t>& der,
     return kOk;
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

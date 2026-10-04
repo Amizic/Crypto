@@ -1,4 +1,4 @@
-// ObsidianGuard - src/PostQuantum.cpp
+// Crypto - src/PostQuantum.cpp
 // Post-quantum hybrid encryption: ML-KEM-768 + HKDF-SHA256 + AES-256-GCM.
 
 #include "PostQuantum.hpp"
@@ -16,10 +16,10 @@
 #include "Hkdf.hpp"
 #include "MlKem768.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 namespace {
 
-constexpr const char* kInfoLabel = "ObsidianGuard post-quantum envelope v1";
+constexpr const char* kInfoLabel = "Crypto post-quantum envelope v1";
 
 constexpr std::size_t kKemLengthFieldSize = 4;
 constexpr std::size_t kAesKeySize = 32;
@@ -156,4 +156,4 @@ int PostQuantum::decrypt(const std::vector<uint8_t>& recipientSecretKey,
     return rc;  // kErrAuth on any tampering, including of the KEM part
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

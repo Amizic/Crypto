@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ObsidianGuard
+project(Crypto
     VERSION 1.0.0
     DESCRIPTION "Modular C++17 cryptography library (AES-256-GCM, RSA-4096, ML-KEM-768) built on OpenSSL"
     LANGUAGES CXX)
@@ -8,14 +8,14 @@ project(ObsidianGuard
 # ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------
-# BUILD_SHARED_LIBS is the standard CMake variable: ON builds ObsidianGuard as
+# BUILD_SHARED_LIBS is the standard CMake variable: ON builds Crypto as
 # a shared library (DLL on Windows), OFF builds a static library. The library
-# itself is declared with add_library(ObsidianGuard ...) without an explicit
+# itself is declared with add_library(Crypto ...) without an explicit
 # type, so this single switch selects between both variants.
-option(BUILD_SHARED_LIBS "Build ObsidianGuard as a shared library (ON) or static library (OFF)" ON)
-option(OBSIDIAN_GUARD_BUILD_EXAMPLES "Build the usage example executable" ON)
-option(OBSIDIAN_GUARD_BUILD_TESTS "Build the ObsidianGuard test suite (CTest)" ON)
-option(OBSIDIAN_GUARD_OPENSSL_STATIC "Define OPENSSL_STATIC. Required when OpenSSL is available as a static library (e.g. vcpkg x64-*-static triplets)" ON)
+option(BUILD_SHARED_LIBS "Build Crypto as a shared library (ON) or static library (OFF)" ON)
+option(CRYPTO_BUILD_EXAMPLES "Build the usage example executable" ON)
+option(CRYPTO_BUILD_TESTS "Build the Crypto test suite (CTest)" ON)
+option(CRYPTO_OPENSSL_STATIC "Define OPENSSL_STATIC. Required when OpenSSL is available as a static library (e.g. vcpkg x64-*-static triplets)" ON)
 
 # ---------------------------------------------------------------------------
 # Global settings
@@ -36,7 +36,7 @@ find_package(OpenSSL 3.5 REQUIRED)
 # ---------------------------------------------------------------------------
 # Library
 # ---------------------------------------------------------------------------
-add_library(ObsidianGuard
+add_library(Crypto
     src/Aes256.cpp
     src/Rsa4096.cpp
     src/MlKem768.cpp
@@ -45,33 +45,33 @@ add_library(ObsidianGuard
     src/PostQuantum.cpp
 )
 
-target_include_directories(ObsidianGuard PUBLIC
+target_include_directories(Crypto PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(ObsidianGuard PUBLIC OpenSSL::Crypto)
+target_link_libraries(Crypto PUBLIC OpenSSL::Crypto)
 
 if(MINGW)
     # A static MinGW OpenSSL links against these Windows system libraries
     # (visible in the OpenSSL build log as LDLIBS).
-    target_link_libraries(ObsidianGuard PUBLIC ws2_32 gdi32 crypt32)
+    target_link_libraries(Crypto PUBLIC ws2_32 gdi32 crypt32)
 endif()
 
-# Import/export semantics (ObsidianGuardLite convention):
-#   * shared build  -> the library's own TUs export (OBSIDIAN_GUARD_EXPORTS),
+# Import/export semantics (CryptoLite convention):
+#   * shared build  -> the library's own TUs export (CRYPTO_EXPORTS),
 #                      consumers implicitly dllimport
-#   * static build  -> OBSIDIAN_GUARD_STATIC is public, so no declspec at all
+#   * static build  -> CRYPTO_STATIC is public, so no declspec at all
 if(BUILD_SHARED_LIBS)
-    target_compile_definitions(ObsidianGuard PRIVATE OBSIDIAN_GUARD_EXPORTS)
+    target_compile_definitions(Crypto PRIVATE CRYPTO_EXPORTS)
 else()
-    target_compile_definitions(ObsidianGuard PUBLIC OBSIDIAN_GUARD_STATIC)
+    target_compile_definitions(Crypto PUBLIC CRYPTO_STATIC)
 endif()
-if(OBSIDIAN_GUARD_OPENSSL_STATIC)
-    target_compile_definitions(ObsidianGuard PUBLIC OPENSSL_STATIC)
+if(CRYPTO_OPENSSL_STATIC)
+    target_compile_definitions(Crypto PUBLIC OPENSSL_STATIC)
 endif()
 
-set_target_properties(ObsidianGuard PROPERTIES
+set_target_properties(Crypto PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
@@ -81,7 +81,7 @@ set_target_properties(ObsidianGuard PROPERTIES
 )
 
 if(NOT WIN32)
-    set_target_properties(ObsidianGuard PROPERTIES
+    set_target_properties(Crypto PROPERTIES
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
     )
@@ -89,25 +89,25 @@ endif()
 
 # When OpenSSL is statically linked into the DLL, do not re-export its symbols.
 if(MINGW AND BUILD_SHARED_LIBS)
-    target_link_options(ObsidianGuard PRIVATE "LINKER:--exclude-libs,ALL")
+    target_link_options(Crypto PRIVATE "LINKER:--exclude-libs,ALL")
 endif()
 
 # Copy the MinGW runtime DLLs next to an executable so it runs without extra
 # PATH configuration.
-function(obsidianguard_copy_mingw_runtime target)
+function(crypto_copy_mingw_runtime target)
     if(NOT MINGW)
         return()
     endif()
-    get_filename_component(_OBSIDIAN_GUARD_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    set(_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS)
+    get_filename_component(_CRYPTO_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(_CRYPTO_MINGW_RUNTIME_DLLS)
     foreach(_runtimeDll IN ITEMS libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll)
-        if(EXISTS "${_OBSIDIAN_GUARD_MINGW_BIN_DIR}/${_runtimeDll}")
-            list(APPEND _OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS "${_OBSIDIAN_GUARD_MINGW_BIN_DIR}/${_runtimeDll}")
+        if(EXISTS "${_CRYPTO_MINGW_BIN_DIR}/${_runtimeDll}")
+            list(APPEND _CRYPTO_MINGW_RUNTIME_DLLS "${_CRYPTO_MINGW_BIN_DIR}/${_runtimeDll}")
         endif()
     endforeach()
-    if(_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS)
+    if(_CRYPTO_MINGW_RUNTIME_DLLS)
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_OBSIDIAN_GUARD_MINGW_RUNTIME_DLLS}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_CRYPTO_MINGW_RUNTIME_DLLS}
                     $<TARGET_FILE_DIR:${target}>
             COMMENT "Copying MinGW runtime DLLs next to ${target}")
     endif()
@@ -116,41 +116,41 @@ endfunction()
 # ---------------------------------------------------------------------------
 # Example
 # ---------------------------------------------------------------------------
-if(OBSIDIAN_GUARD_BUILD_EXAMPLES)
+if(CRYPTO_BUILD_EXAMPLES)
     add_executable(usage_example examples/usage_example.cpp)
-    target_link_libraries(usage_example PRIVATE ObsidianGuard)
+    target_link_libraries(usage_example PRIVATE Crypto)
     set_target_properties(usage_example PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
-    obsidianguard_copy_mingw_runtime(usage_example)
+    crypto_copy_mingw_runtime(usage_example)
 
     add_executable(quickstart examples/quickstart.cpp)
-    target_link_libraries(quickstart PRIVATE ObsidianGuard)
+    target_link_libraries(quickstart PRIVATE Crypto)
     set_target_properties(quickstart PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
-    obsidianguard_copy_mingw_runtime(quickstart)
+    crypto_copy_mingw_runtime(quickstart)
 endif()
 
 # ---------------------------------------------------------------------------
 # Tests (CTest)
 # ---------------------------------------------------------------------------
 include(CTest)
-if(OBSIDIAN_GUARD_BUILD_TESTS AND BUILD_TESTING)
-    add_executable(ObsidianGuard_tests tests/test_main.cpp)
-    target_link_libraries(ObsidianGuard_tests PRIVATE ObsidianGuard)
-    set_target_properties(ObsidianGuard_tests PROPERTIES
+if(CRYPTO_BUILD_TESTS AND BUILD_TESTING)
+    add_executable(Crypto_tests tests/test_main.cpp)
+    target_link_libraries(Crypto_tests PRIVATE Crypto)
+    set_target_properties(Crypto_tests PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
-    obsidianguard_copy_mingw_runtime(ObsidianGuard_tests)
+    crypto_copy_mingw_runtime(Crypto_tests)
 
-    add_test(NAME ObsidianGuard_tests COMMAND ObsidianGuard_tests)
+    add_test(NAME Crypto_tests COMMAND Crypto_tests)
     # RSA-4096 key generation is intentionally slow; be generous on CI.
     # The test binary pauses at the end when run interactively; disable the
     # pause under CTest so automated runs never wait for a keypress.
-    set_tests_properties(ObsidianGuard_tests PROPERTIES
+    set_tests_properties(Crypto_tests PROPERTIES
         TIMEOUT 600
-        ENVIRONMENT "OBSIDIAN_GUARD_NO_PAUSE=1"
+        ENVIRONMENT "CRYPTO_NO_PAUSE=1"
     )
 endif()
 
@@ -160,7 +160,7 @@ endif()
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
-install(TARGETS ObsidianGuard EXPORT ObsidianGuardTargets
+install(TARGETS Crypto EXPORT CryptoTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -168,26 +168,26 @@ install(TARGETS ObsidianGuard EXPORT ObsidianGuardTargets
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(EXPORT ObsidianGuardTargets
-    FILE ObsidianGuardTargets.cmake
-    NAMESPACE ObsidianGuard::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ObsidianGuard
+install(EXPORT CryptoTargets
+    FILE CryptoTargets.cmake
+    NAMESPACE Crypto::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Crypto
 )
 
 configure_package_config_file(
-    cmake/ObsidianGuardConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/ObsidianGuardConfig.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ObsidianGuard
+    cmake/CryptoConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/CryptoConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Crypto
 )
 
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/ObsidianGuardConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/CryptoConfigVersion.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/ObsidianGuardConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/ObsidianGuardConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ObsidianGuard
+    ${CMAKE_CURRENT_BINARY_DIR}/CryptoConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/CryptoConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Crypto
 )

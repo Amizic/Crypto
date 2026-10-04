@@ -1,4 +1,4 @@
-# ObsidianGuard
+# Crypto
 
 A small, stateless, C++17 cryptography library built on OpenSSL. Six
 classes, one error model:
@@ -12,21 +12,21 @@ classes, one error model:
 | `Sha256` | SHA-256 / SHA-512 | One-shot hashing |
 | `PostQuantum` | ML-KEM-768 + HKDF-SHA256 + AES-256-GCM | One-call hybrid encryption |
 
-## ObsidianGuard vs ObsidianGuardLite
+## Crypto vs CryptoLite
 
 This workspace ships two related libraries. Both implement the same
 algorithms (AES-256-GCM, RSA-4096, ML-KEM-768) with aligned return codes and
 naming, but with different key-ownership models — pick per project:
 
-| | **ObsidianGuard (this one)** | **ObsidianGuardLite** |
+| | **Crypto (this one)** | **CryptoLite** |
 |---|---|---|
 | Model | **Stateless engine** — classes hold nothing; keys are byte vectors / `EVP_PKEY*` you pass per call | **Key-owning objects** — each object stores its key inside itself |
 | Locks | none — thread-safe by construction | internal mutex per object (uncontended in per-client use) |
 | Key storage | wherever *your* code keeps it (e.g. a per-client session struct) | inside the object (non-copyable); PEM save/load to files |
 | Best for | servers with many clients/threads, pinned cores, custom session management, maximum throughput | small tools and apps that want self-contained per-client objects |
 
-Use **ObsidianGuard** when your application owns the key lifecycle and wants
-a zero-lock, zero-state engine; use **ObsidianGuardLite** when you prefer
+Use **Crypto** when your application owns the key lifecycle and wants
+a zero-lock, zero-state engine; use **CryptoLite** when you prefer
 each object to carry its key and save/load itself. Both are thread-safe and
 covered by the same style of test suites.
 
@@ -35,7 +35,7 @@ covered by the same style of test suites.
 * **Plain `int` return codes, nothing else** — every public method returns
   `0` on success or a negative error code on failure. No result structs, no
   message strings; the code *is* the error. The same constants are exposed
-  as `static constexpr int` members on **every class** (ObsidianGuardLite
+  as `static constexpr int` members on **every class** (CryptoLite
   convention), so you can write readable checks:
 
   | Constant | Value | Meaning |
@@ -46,12 +46,12 @@ covered by the same style of test suites.
   | `kErrAuth` | `-3` | authentication/verification failed (wrong key, nonce (IV), tag or signature) |
   | `kErrUnavailable` | `-4` | the algorithm is not available in this OpenSSL build |
   | `kErrInternal` | `-5` | unexpected internal failure (reserved) |
-  | `kErrFile` | `-6` | file I/O error (parity with ObsidianGuardLite; unused here) |
+  | `kErrFile` | `-6` | file I/O error (parity with CryptoLite; unused here) |
 
   ```cpp
   int rc = aes.decrypt(cipher, key, iv, tag, plain);
   if (rc != 0) { /* failed */ }
-  if (rc == ObsidianGuard::Aes256::kErrAuth) { /* tampered data */ }
+  if (rc == Crypto::Aes256::kErrAuth) { /* tampered data */ }
   ```
 
   For example, AES-GCM decryption reports `kErrInvalidArgument` for a wrong
@@ -65,7 +65,7 @@ covered by the same style of test suites.
   state.
 * **No exceptions, no printing, no abort** — every method is `noexcept` and
   reports everything through its return code.
-* **One include** — `#include "obsidianguard.hpp"` brings in all six classes.
+* **One include, one namespace** — `#include "Crypto.hpp"` brings in all six classes, which live in the `Crypto` namespace (e.g. `Crypto::Aes256`).
 * **AAD support** — `Aes256` has encrypt/decrypt overloads that bind
   associated data (headers, IDs, metadata) into the GCM tag: it is
   authenticated but not encrypted, and any tampering with it is detected.
@@ -79,9 +79,9 @@ covered by the same style of test suites.
 Typical call:
 
 ```cpp
-#include "obsidianguard.hpp"
+#include "Crypto.hpp"
 
-ObsidianGuard::Aes256 aes;
+Crypto::Aes256 aes;
 std::vector<uint8_t> key, iv, ciphertext, plaintext;
 std::array<uint8_t, 16> tag;
 
@@ -114,7 +114,7 @@ The `scripts/build.ps1` helper builds with the in-workspace toolchain and can
 run the tests right after: `pwsh -ExecutionPolicy Bypass -File scripts/build.ps1
 -Linkage shared -Test`.
 
-`add_library(ObsidianGuard ...)` is declared without an explicit type, so the
+`add_library(Crypto ...)` is declared without an explicit type, so the
 standard `BUILD_SHARED_LIBS` variable (ON by default) selects shared vs
 static linking.
 
@@ -137,10 +137,10 @@ ctest --test-dir build-static --output-on-failure     # static build
 It covers round trips, every negative path with its exact error code, the
 error-model contract, known-answer vectors (RFC 5869 HKDF, SHA-256/512), and
 multithreaded stress tests that hammer a single shared instance from several
-threads. When you run `ObsidianGuard_tests.exe` directly in a terminal (or
+threads. When you run `Crypto_tests.exe` directly in a terminal (or
 double-click it), it pauses at the end so the window stays open while you
 read the results; CTest and redirected runs skip the pause automatically,
-and setting `OBSIDIAN_GUARD_NO_PAUSE=1` forces it off.
+and setting `CRYPTO_NO_PAUSE=1` forces it off.
 
 ## Getting OpenSSL 3.5+
 
@@ -174,17 +174,17 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 | Option | Default | Meaning |
 |---|---|---|
 | `BUILD_SHARED_LIBS` | `ON` | Shared library (`OFF` = static library) |
-| `OBSIDIAN_GUARD_BUILD_EXAMPLES` | `ON` | Build `examples/usage_example.cpp` and `examples/quickstart.cpp` |
-| `OBSIDIAN_GUARD_BUILD_TESTS` | `ON` | Build `tests/test_main.cpp` and register it with CTest |
-| `OBSIDIAN_GUARD_OPENSSL_STATIC` | `ON` | Define `OPENSSL_STATIC` (needed when OpenSSL is a static library, e.g. vcpkg static triplets) |
+| `CRYPTO_BUILD_EXAMPLES` | `ON` | Build `examples/usage_example.cpp` and `examples/quickstart.cpp` |
+| `CRYPTO_BUILD_TESTS` | `ON` | Build `tests/test_main.cpp` and register it with CTest |
+| `CRYPTO_OPENSSL_STATIC` | `ON` | Define `OPENSSL_STATIC` (needed when OpenSSL is a static library, e.g. vcpkg static triplets) |
 
 ## Project layout
 
 ```
-ObsidianGuard/
+Crypto/
 ├── CMakeLists.txt
 ├── include/
-│   ├── obsidianguard.hpp   # single-include convenience header
+│   ├── Crypto.hpp   # single-include convenience header
 │   ├── Aes256.hpp
 │   ├── Rsa4096.hpp
 │   ├── MlKem768.hpp
@@ -205,7 +205,7 @@ ObsidianGuard/
 ├── tests/
 │   └── test_main.cpp        # dependency-free test suite (CTest)
 ├── cmake/
-│   └── ObsidianGuardConfig.cmake.in
+│   └── CryptoConfig.cmake.in
 └── scripts/
     ├── build.ps1           # one-command build (shared/static)
     └── run_example.ps1     # one-command test run
@@ -225,7 +225,7 @@ ObsidianGuard/
   with `kErrUnavailable` (`-4`) — the library still builds and runs on older
   OpenSSL.
 * Keys from `Rsa4096::generateKeyPair()` are returned as `EVP_PKEY*` owned by
-  the caller; wrap them with `ObsidianGuard::wrapPkey()`
+  the caller; wrap them with `Crypto::wrapPkey()`
   (`include/OpensslRaii.hpp`) for automatic cleanup with `EVP_PKEY_free()`.
 * ML-KEM key material is exchanged as DER (`i2d_PUBKEY` / `i2d_PrivateKey`),
   so no OpenSSL pointer ever crosses the API boundary.

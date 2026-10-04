@@ -1,4 +1,4 @@
-// ObsidianGuard - src/Sha256.cpp
+// Crypto - src/Sha256.cpp
 // One-shot SHA-256 / SHA-512 hashing.
 
 #include "Sha256.hpp"
@@ -10,7 +10,7 @@
 
 #include "OpensslRaii.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 namespace {
 
 int digestMessage(const std::vector<uint8_t>& message, const EVP_MD* algorithm,
@@ -54,4 +54,4 @@ int Sha256::hash512(const std::vector<uint8_t>& message,
     return digestMessage(message, EVP_sha512(), digest);
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

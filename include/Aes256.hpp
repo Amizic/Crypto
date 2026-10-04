@@ -7,17 +7,17 @@
 // threads may share one instance (or use separate instances) concurrently.
 // Every method returns 0 on success or a negative return code on failure
 // (see the kErr* constants).
-#ifndef OBSIDIAN_GUARD_AES256_HPP
-#define OBSIDIAN_GUARD_AES256_HPP
+#ifndef CRYPTO_AES256_HPP
+#define CRYPTO_AES256_HPP
 
 // DLL import/export macro (Windows).
-#ifndef OBSIDIAN_GUARD_API
-    #ifdef OBSIDIAN_GUARD_STATIC
-        #define OBSIDIAN_GUARD_API
-    #elif defined(OBSIDIAN_GUARD_EXPORTS)
-        #define OBSIDIAN_GUARD_API __declspec(dllexport)
+#ifndef CRYPTO_API
+    #ifdef CRYPTO_STATIC
+        #define CRYPTO_API
+    #elif defined(CRYPTO_EXPORTS)
+        #define CRYPTO_API __declspec(dllexport)
     #else
-        #define OBSIDIAN_GUARD_API __declspec(dllimport)
+        #define CRYPTO_API __declspec(dllimport)
     #endif
 #endif
 
@@ -26,9 +26,9 @@
 #include <cstdint>
 #include <vector>
 
-namespace ObsidianGuard {
+namespace Crypto {
 
-class OBSIDIAN_GUARD_API Aes256 {
+class CRYPTO_API Aes256 {
 public:
     static constexpr std::size_t kKeySize = 32; // bytes = 256 bits
     static constexpr std::size_t kIvSize  = 12; // bytes = 96 bits (GCM)
@@ -41,7 +41,7 @@ public:
     static constexpr int kErrAuth           = -3;  // tampered data / wrong key
     static constexpr int kErrUnavailable    = -4;  // algorithm unavailable at runtime
     static constexpr int kErrInternal       = -5;  // unexpected internal failure
-    static constexpr int kErrFile           = -6;  // file I/O error (parity with ObsidianGuardLite)
+    static constexpr int kErrFile           = -6;  // file I/O error (parity with CryptoLite)
 
     /// Human readable algorithm identifier ("AES-256-GCM").
     const char* algorithmName() const noexcept;
@@ -106,6 +106,6 @@ public:
                 std::vector<uint8_t>& plaintext) noexcept;
 };
 
-} // namespace ObsidianGuard
+} // namespace Crypto
 
-#endif // OBSIDIAN_GUARD_AES256_HPP
+#endif // CRYPTO_AES256_HPP

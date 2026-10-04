@@ -1,4 +1,4 @@
-// ObsidianGuard - src/Aes256.cpp
+// Crypto - src/Aes256.cpp
 // AES-256-GCM authenticated encryption (EVP_aes_256_gcm).
 
 #include "Aes256.hpp"
@@ -14,7 +14,7 @@
 
 #include "OpensslRaii.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 
 const char* Aes256::algorithmName() const noexcept {
     return "AES-256-GCM";
@@ -255,4 +255,4 @@ int Aes256::decrypt(const std::vector<uint8_t>& ciphertext,
     return decrypt(body, key, iv, tag, plaintext);
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

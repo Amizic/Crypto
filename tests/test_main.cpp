@@ -1,6 +1,6 @@
-// ObsidianGuard - tests/test_main.cpp
+// Crypto - tests/test_main.cpp
 //
-// Dependency-free test suite for ObsidianGuard (no GoogleTest/Catch2; plain
+// Dependency-free test suite for Crypto (no GoogleTest/Catch2; plain
 // assertions wired into CTest).
 //
 // Coverage:
@@ -39,41 +39,41 @@
 #  include <io.h>  // _isatty / _fileno: pause only for an interactive console
 #endif
 
-#include "obsidianguard.hpp"
+#include "Crypto.hpp"
 
 namespace {
 
 // ---------------------------------------------------------------------------
 // Error code constants (public contract; compile-time checked as well).
-// ObsidianGuardLite convention: every class exposes the same kOk / kErr*
+// CryptoLite convention: every class exposes the same kOk / kErr*
 // static constexpr int members.
 // ---------------------------------------------------------------------------
-constexpr int kOk              = ObsidianGuard::Aes256::kOk;
-constexpr int kInvalidArgument = ObsidianGuard::Aes256::kErrInvalidArgument;
-constexpr int kOpenSslFailure  = ObsidianGuard::Aes256::kErrOpenSsl;
-constexpr int kAuthFailed      = ObsidianGuard::Aes256::kErrAuth;
-constexpr int kUnavailable     = ObsidianGuard::Aes256::kErrUnavailable;
-constexpr int kInternal        = ObsidianGuard::Aes256::kErrInternal;
+constexpr int kOk              = Crypto::Aes256::kOk;
+constexpr int kInvalidArgument = Crypto::Aes256::kErrInvalidArgument;
+constexpr int kOpenSslFailure  = Crypto::Aes256::kErrOpenSsl;
+constexpr int kAuthFailed      = Crypto::Aes256::kErrAuth;
+constexpr int kUnavailable     = Crypto::Aes256::kErrUnavailable;
+constexpr int kInternal        = Crypto::Aes256::kErrInternal;
 
-static_assert(ObsidianGuard::Aes256::kOk == 0, "kOk must be 0");
-static_assert(ObsidianGuard::Aes256::kErrInvalidArgument == -1,
+static_assert(Crypto::Aes256::kOk == 0, "kOk must be 0");
+static_assert(Crypto::Aes256::kErrInvalidArgument == -1,
               "kErrInvalidArgument must be -1");
-static_assert(ObsidianGuard::Aes256::kErrOpenSsl == -2, "kErrOpenSsl must be -2");
-static_assert(ObsidianGuard::Aes256::kErrAuth == -3, "kErrAuth must be -3");
-static_assert(ObsidianGuard::Aes256::kErrUnavailable == -4, "kErrUnavailable must be -4");
-static_assert(ObsidianGuard::Aes256::kErrInternal == -5, "kErrInternal must be -5");
-static_assert(ObsidianGuard::Aes256::kErrFile == -6, "kErrFile must be -6");
+static_assert(Crypto::Aes256::kErrOpenSsl == -2, "kErrOpenSsl must be -2");
+static_assert(Crypto::Aes256::kErrAuth == -3, "kErrAuth must be -3");
+static_assert(Crypto::Aes256::kErrUnavailable == -4, "kErrUnavailable must be -4");
+static_assert(Crypto::Aes256::kErrInternal == -5, "kErrInternal must be -5");
+static_assert(Crypto::Aes256::kErrFile == -6, "kErrFile must be -6");
 // The same values must be exposed by every class.
-static_assert(ObsidianGuard::Rsa4096::kErrAuth == ObsidianGuard::Aes256::kErrAuth,
+static_assert(Crypto::Rsa4096::kErrAuth == Crypto::Aes256::kErrAuth,
               "Rsa4096 and Aes256 must share the codes");
-static_assert(ObsidianGuard::MlKem768::kErrUnavailable ==
-                  ObsidianGuard::Aes256::kErrUnavailable,
+static_assert(Crypto::MlKem768::kErrUnavailable ==
+                  Crypto::Aes256::kErrUnavailable,
               "MlKem768 and Aes256 must share the codes");
-static_assert(ObsidianGuard::Hkdf::kErrOpenSsl == ObsidianGuard::Aes256::kErrOpenSsl,
+static_assert(Crypto::Hkdf::kErrOpenSsl == Crypto::Aes256::kErrOpenSsl,
               "Hkdf and Aes256 must share the codes");
-static_assert(ObsidianGuard::Sha256::kErrOpenSsl == ObsidianGuard::Aes256::kErrOpenSsl,
+static_assert(Crypto::Sha256::kErrOpenSsl == Crypto::Aes256::kErrOpenSsl,
               "Sha256 and Aes256 must share the codes");
-static_assert(ObsidianGuard::PostQuantum::kErrAuth == ObsidianGuard::Aes256::kErrAuth,
+static_assert(Crypto::PostQuantum::kErrAuth == Crypto::Aes256::kErrAuth,
               "PostQuantum and Aes256 must share the codes");
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ std::vector<uint8_t> pseudoRandomBytes(std::size_t count, uint64_t& state) {
 }
 
 bool sha256Bytes(const std::vector<uint8_t>& message, std::vector<uint8_t>& digest) {
-    ObsidianGuard::EvpMdCtxPtr context = ObsidianGuard::makeMdCtx();
+    Crypto::EvpMdCtxPtr context = Crypto::makeMdCtx();
     if (!context) {
         return false;
     }
@@ -174,15 +174,15 @@ bool sha256Bytes(const std::vector<uint8_t>& message, std::vector<uint8_t>& dige
 
 /// True when the test should wait for a keypress before exiting: only for an
 /// interactive console (double-click or a terminal window). Piped/redirected
-/// runs (CTest, CI) skip the pause, and OBSIDIAN_GUARD_NO_PAUSE forces it off.
+/// runs (CTest, CI) skip the pause, and CRYPTO_NO_PAUSE forces it off.
 bool pauseRequested() {
 #if defined(_WIN32)
-    if (std::getenv("OBSIDIAN_GUARD_NO_PAUSE") != nullptr) {
+    if (std::getenv("CRYPTO_NO_PAUSE") != nullptr) {
         return false;
     }
     return _isatty(_fileno(stdin)) != 0;
 #else
-    return std::getenv("OBSIDIAN_GUARD_NO_PAUSE") == nullptr;
+    return std::getenv("CRYPTO_NO_PAUSE") == nullptr;
 #endif
 }
 
@@ -190,7 +190,7 @@ bool pauseRequested() {
 // 1. Error model
 // ---------------------------------------------------------------------------
 void testErrorModel() {
-    ObsidianGuard::Aes256 module;
+    Crypto::Aes256 module;
     CHECK_EQ(std::string(module.algorithmName()), std::string("AES-256-GCM"));
 
     // A successful call returns exactly 0.
@@ -217,7 +217,7 @@ void testErrorModel() {
 // 2. AES-256-GCM round trips
 // ---------------------------------------------------------------------------
 void testAesRoundTrips() {
-    ObsidianGuard::Aes256 module;
+    Crypto::Aes256 module;
 
     std::vector<uint8_t> key;
     std::vector<uint8_t> nonce;
@@ -259,7 +259,7 @@ void testAesRoundTrips() {
 // 3. AES-256-GCM error codes
 // ---------------------------------------------------------------------------
 void testAesErrorCodes() {
-    ObsidianGuard::Aes256 module;
+    Crypto::Aes256 module;
 
     std::vector<uint8_t> key;
     std::vector<uint8_t> nonce;
@@ -317,7 +317,7 @@ void testAesErrorCodes() {
 // 4. RSA-4096
 // ---------------------------------------------------------------------------
 void testRsa() {
-    ObsidianGuard::Rsa4096 module;
+    Crypto::Rsa4096 module;
     CHECK_EQ(std::string(module.algorithmName()),
              std::string("RSA-4096 (OAEP-SHA256 / PSS-SHA256)"));
 
@@ -343,7 +343,7 @@ void testRsa() {
         std::cout << "  (skipping the remaining RSA tests: no key material)\n";
         return;
     }
-    ObsidianGuard::EvpPkeyPtr key = ObsidianGuard::wrapPkey(rawKey);
+    Crypto::EvpPkeyPtr key = Crypto::wrapPkey(rawKey);
 
     // --- InvalidArgument (-1): empty buffers with a valid key -------------
     CHECK_EQ(module.encrypt(key.get(), std::vector<uint8_t>(), ciphertext),
@@ -399,7 +399,7 @@ void testRsa() {
 // 5. ML-KEM-768
 // ---------------------------------------------------------------------------
 void testMlKem() {
-    ObsidianGuard::MlKem768 module;
+    Crypto::MlKem768 module;
     CHECK_EQ(std::string(module.algorithmName()), std::string("ML-KEM-768 (FIPS 203)"));
 
     std::vector<uint8_t> publicKey;
@@ -462,7 +462,7 @@ void testMlKem() {
 // 5b. AES-256-GCM auto-nonce convenience overloads
 // ---------------------------------------------------------------------------
 void testAesAutoIv() {
-    ObsidianGuard::Aes256 module;
+    Crypto::Aes256 module;
 
     std::vector<uint8_t> key;
     CHECK_EQ(module.generateKey(key), 0);
@@ -475,8 +475,8 @@ void testAesAutoIv() {
 
     // Round trip: output layout is [IV][ciphertext][tag].
     CHECK_EQ(module.encrypt(plaintext, key, cipherA), 0);
-    CHECK_EQ(cipherA.size(), plaintext.size() + ObsidianGuard::Aes256::kIvSize +
-                                  ObsidianGuard::Aes256::kTagSize);
+    CHECK_EQ(cipherA.size(), plaintext.size() + Crypto::Aes256::kIvSize +
+                                  Crypto::Aes256::kTagSize);
     CHECK_EQ(module.decrypt(cipherA, key, recovered), 0);
     CHECK(bytesEqual(recovered, plaintext));
 
@@ -502,7 +502,7 @@ void testAesAutoIv() {
 // 6. AES-256-GCM with associated data (AAD)
 // ---------------------------------------------------------------------------
 void testAad() {
-    ObsidianGuard::Aes256 module;
+    Crypto::Aes256 module;
 
     std::vector<uint8_t> key;
     std::vector<uint8_t> nonce;
@@ -553,7 +553,7 @@ void testAad() {
 // 7. HKDF-SHA256 (RFC 5869)
 // ---------------------------------------------------------------------------
 void testHkdf() {
-    ObsidianGuard::Hkdf module;
+    Crypto::Hkdf module;
     CHECK_EQ(std::string(module.algorithmName()), std::string("HKDF-SHA256 (RFC 5869)"));
 
     // RFC 5869 Appendix A.1 test case 1 (SHA-256, L = 42): known-answer test.
@@ -590,7 +590,7 @@ void testHkdf() {
              kInvalidArgument);
     CHECK_EQ(module.derive(ikm, salt, info, 0, out), kInvalidArgument);
     CHECK_EQ(module.derive(ikm, salt, info,
-                           ObsidianGuard::Hkdf::kMaxOutputLength + 1, out),
+                           Crypto::Hkdf::kMaxOutputLength + 1, out),
              kInvalidArgument);
 }
 
@@ -598,7 +598,7 @@ void testHkdf() {
 // 8. SHA-256 / SHA-512
 // ---------------------------------------------------------------------------
 void testSha() {
-    ObsidianGuard::Sha256 module;
+    Crypto::Sha256 module;
     CHECK_EQ(std::string(module.algorithmName()), std::string("SHA-256 / SHA-512"));
 
     const std::vector<uint8_t> abc = {'a', 'b', 'c'};
@@ -634,14 +634,14 @@ void testSha() {
 // 9. RSA key persistence (PEM / DER)
 // ---------------------------------------------------------------------------
 void testRsaKeys() {
-    ObsidianGuard::Rsa4096 module;
+    Crypto::Rsa4096 module;
     EVP_PKEY* rawKey = nullptr;
     CHECK_EQ(module.generateKeyPair(&rawKey), 0);
     if (rawKey == nullptr) {
         std::cout << "  (skipping the RSA persistence tests: no key material)\n";
         return;
     }
-    ObsidianGuard::EvpPkeyPtr key = ObsidianGuard::wrapPkey(rawKey);
+    Crypto::EvpPkeyPtr key = Crypto::wrapPkey(rawKey);
 
     // PEM round trips.
     std::string pubPem;
@@ -653,10 +653,10 @@ void testRsaKeys() {
 
     rawKey = nullptr;
     CHECK_EQ(module.loadPublicKeyPem(pubPem, &rawKey), 0);
-    ObsidianGuard::EvpPkeyPtr loadedPub = ObsidianGuard::wrapPkey(rawKey);
+    Crypto::EvpPkeyPtr loadedPub = Crypto::wrapPkey(rawKey);
     rawKey = nullptr;
     CHECK_EQ(module.loadPrivateKeyPem(privPem, &rawKey), 0);
-    ObsidianGuard::EvpPkeyPtr loadedPriv = ObsidianGuard::wrapPkey(rawKey);
+    Crypto::EvpPkeyPtr loadedPriv = Crypto::wrapPkey(rawKey);
 
     const std::vector<uint8_t> plaintext(100, 0x5C);
     std::vector<uint8_t> ciphertext;
@@ -675,10 +675,10 @@ void testRsaKeys() {
 
     rawKey = nullptr;
     CHECK_EQ(module.loadPublicKeyDer(pubDer, &rawKey), 0);
-    loadedPub = ObsidianGuard::wrapPkey(rawKey);
+    loadedPub = Crypto::wrapPkey(rawKey);
     rawKey = nullptr;
     CHECK_EQ(module.loadPrivateKeyDer(privDer, &rawKey), 0);
-    loadedPriv = ObsidianGuard::wrapPkey(rawKey);
+    loadedPriv = Crypto::wrapPkey(rawKey);
     ciphertext.clear();
     decrypted.clear();
     CHECK_EQ(module.encrypt(loadedPub.get(), plaintext, ciphertext), 0);
@@ -700,11 +700,11 @@ void testRsaKeys() {
 // 10. Hybrid envelope (ML-KEM-768 + HKDF-SHA256 + AES-256-GCM)
 // ---------------------------------------------------------------------------
 void testHybrid() {
-    ObsidianGuard::PostQuantum module;
+    Crypto::PostQuantum module;
     CHECK_EQ(std::string(module.algorithmName()),
              std::string("ML-KEM-768 + HKDF-SHA256 + AES-256-GCM"));
 
-    ObsidianGuard::MlKem768 kem;
+    Crypto::MlKem768 kem;
     std::vector<uint8_t> publicKey;
     std::vector<uint8_t> secretKey;
     const int rc = kem.generateKeyPair(publicKey, secretKey);
@@ -755,8 +755,8 @@ void testHybrid() {
 }
 
 void testHybridThreadSafety() {
-    ObsidianGuard::PostQuantum shared;
-    ObsidianGuard::MlKem768 kem;
+    Crypto::PostQuantum shared;
+    Crypto::MlKem768 kem;
     std::vector<uint8_t> publicKey;
     std::vector<uint8_t> secretKey;
     const int rc = kem.generateKeyPair(publicKey, secretKey);
@@ -800,7 +800,7 @@ void testHybridThreadSafety() {
 // 11. Thread safety: one shared (stateless) instance, many threads
 // ---------------------------------------------------------------------------
 void testAesThreadSafety() {
-    ObsidianGuard::Aes256 shared;
+    Crypto::Aes256 shared;
     constexpr int kThreads = 8;
     constexpr int kIterations = 25;
     std::atomic<int> failures{0};
@@ -857,13 +857,13 @@ void testAesThreadSafety() {
 }
 
 void testRsaThreadSafety() {
-    ObsidianGuard::Rsa4096 shared;
+    Crypto::Rsa4096 shared;
     EVP_PKEY* rawKey = nullptr;
     if (shared.generateKeyPair(&rawKey) != 0 || rawKey == nullptr) {
         std::cout << "  (skipping the RSA thread test: no key material)\n";
         return;
     }
-    ObsidianGuard::EvpPkeyPtr key = ObsidianGuard::wrapPkey(rawKey);
+    Crypto::EvpPkeyPtr key = Crypto::wrapPkey(rawKey);
 
     constexpr int kThreads = 4;
     constexpr int kIterations = 8;
@@ -908,7 +908,7 @@ void testRsaThreadSafety() {
 }
 
 void testMlKemThreadSafety() {
-    ObsidianGuard::MlKem768 shared;
+    Crypto::MlKem768 shared;
     std::vector<uint8_t> publicKey;
     std::vector<uint8_t> secretKey;
     const int rc = shared.generateKeyPair(publicKey, secretKey);
@@ -952,7 +952,7 @@ void testMlKemThreadSafety() {
 
 int main() {
     std::cout << "============================================================\n";
-    std::cout << " ObsidianGuard test suite\n";
+    std::cout << " Crypto test suite\n";
     std::cout << " OpenSSL runtime version: " << OpenSSL_version(OPENSSL_VERSION) << "\n";
     std::cout << "============================================================\n\n";
 

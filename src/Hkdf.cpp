@@ -1,4 +1,4 @@
-// ObsidianGuard - src/Hkdf.cpp
+// Crypto - src/Hkdf.cpp
 // HKDF-SHA256 key derivation (RFC 5869).
 
 #include "Hkdf.hpp"
@@ -13,7 +13,7 @@
 
 #include "OpensslRaii.hpp"
 
-namespace ObsidianGuard {
+namespace Crypto {
 
 const char* Hkdf::algorithmName() const noexcept {
     return "HKDF-SHA256 (RFC 5869)";
@@ -74,4 +74,4 @@ int Hkdf::derive(const std::vector<uint8_t>& inputKeyMaterial,
     return kOk;
 }
 
-} // namespace ObsidianGuard
+} // namespace Crypto

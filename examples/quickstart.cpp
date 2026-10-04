@@ -1,4 +1,4 @@
-// ObsidianGuard - examples/quickstart.cpp
+// Crypto - examples/quickstart.cpp
 //
 // The smallest useful tour of the library: AES-256-GCM, RSA-4096 and
 // ML-KEM-768 (post-quantum), plus the helpers that tie them together (HKDF,
@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "obsidianguard.hpp"
+#include "Crypto.hpp"
 
 namespace {
 
@@ -25,7 +25,7 @@ std::vector<uint8_t> bytes(const std::string& text) {
 // --- 1. Aes256: one key, one fresh IV per message ---------------------------
 void aesDemo() {
     std::cout << "--- AES-256-GCM ---\n";
-    ObsidianGuard::Aes256 aes;
+    Crypto::Aes256 aes;
 
     std::vector<uint8_t> key;
     std::vector<uint8_t> iv;
@@ -54,16 +54,16 @@ void aesDemo() {
 // --- 2. Rsa4096: sign/verify + small OAEP messages + key transfer -----------
 void rsaDemo() {
     std::cout << "--- RSA-4096 ---\n";
-    ObsidianGuard::Rsa4096 rsa;
+    Crypto::Rsa4096 rsa;
 
     EVP_PKEY* raw = nullptr;
     if (rsa.generateKeyPair(&raw) != 0) {
         return;
     }
-    ObsidianGuard::EvpPkeyPtr key = ObsidianGuard::wrapPkey(raw);
+    Crypto::EvpPkeyPtr key = Crypto::wrapPkey(raw);
 
     // Sign with the private key, verify with the public key.
-    ObsidianGuard::Sha256 sha;
+    Crypto::Sha256 sha;
     std::vector<uint8_t> digest;
     std::vector<uint8_t> signature;
     const std::vector<uint8_t> message = bytes("signed command");
@@ -85,7 +85,7 @@ void rsaDemo() {
     if (rsa.loadPublicKeyPem(pem, &rawPeer) != 0) {
         return;
     }
-    ObsidianGuard::EvpPkeyPtr peerKey = ObsidianGuard::wrapPkey(rawPeer);
+    Crypto::EvpPkeyPtr peerKey = Crypto::wrapPkey(rawPeer);
     if (rsa.verify(peerKey.get(), digest, signature) != 0) {
         std::cout << "  verify with transferred key failed\n";
         return;
@@ -107,7 +107,7 @@ void rsaDemo() {
 // --- 3. MlKem768 (post-quantum) + what to do with the shared secret ---------
 void mlKemDemo() {
     std::cout << "--- ML-KEM-768 (post-quantum) ---\n";
-    ObsidianGuard::MlKem768 kem;
+    Crypto::MlKem768 kem;
 
     // Alice: make a keypair, send the public key to Bob.
     std::vector<uint8_t> alicePub;
@@ -136,7 +136,7 @@ void mlKemDemo() {
     std::cout << "  both sides derived the same 32-byte secret\n";
 
     // Derive a dedicated AES key from the shared secret (optional salt/info).
-    ObsidianGuard::Hkdf hkdf;
+    Crypto::Hkdf hkdf;
     std::vector<uint8_t> aesKey;
     if (hkdf.derive(aliceSecret, std::vector<uint8_t>(),
                     std::vector<uint8_t>(), 32, aesKey) != 0) {
@@ -145,7 +145,7 @@ void mlKemDemo() {
     std::cout << "  HKDF derived an AES key (" << aesKey.size() << " bytes)\n";
 
     // OR skip the manual steps: one-call PostQuantum hybrid encryption.
-    ObsidianGuard::PostQuantum pq;
+    Crypto::PostQuantum pq;
     std::vector<uint8_t> envelope;
     std::vector<uint8_t> opened;
     const std::vector<uint8_t> message = bytes("post-quantum message");
@@ -162,9 +162,9 @@ void mlKemDemo() {
 void fiveMessagesDemo() {
     std::cout << "--- A session: handshake + 5 messages ---\n";
 
-    ObsidianGuard::MlKem768 kem;
-    ObsidianGuard::Hkdf hkdf;
-    ObsidianGuard::Aes256 aes;
+    Crypto::MlKem768 kem;
+    Crypto::Hkdf hkdf;
+    Crypto::Aes256 aes;
 
     // ---- one-time handshake ------------------------------------------------
     // Client: keypair; public key -> wire -> server.
@@ -223,12 +223,12 @@ void fiveMessagesDemo() {
 
         // Receiver: split the blob back and decrypt with the SAME key.
         const std::vector<uint8_t> rxIv(wire.begin(),
-                                         wire.begin() + ObsidianGuard::Aes256::kIvSize);
-        const std::vector<uint8_t> rxTag(wire.end() - ObsidianGuard::Aes256::kTagSize,
+                                         wire.begin() + Crypto::Aes256::kIvSize);
+        const std::vector<uint8_t> rxTag(wire.end() - Crypto::Aes256::kTagSize,
                                          wire.end());
         const std::vector<uint8_t> rxCipher(
-            wire.begin() + ObsidianGuard::Aes256::kIvSize,
-            wire.end() - ObsidianGuard::Aes256::kTagSize);
+            wire.begin() + Crypto::Aes256::kIvSize,
+            wire.end() - Crypto::Aes256::kTagSize);
         std::vector<uint8_t> plain;
         if (aes.decrypt(rxCipher, clientToServerKey, rxIv, rxTag, plain) != 0 ||
             plain != message) {

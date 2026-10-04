@@ -1,5 +1,5 @@
 <#
-ObsidianGuard build helper.
+Crypto build helper.
 Builds the project with the local, in-workspace toolchain (tools\mingw64) and
 the local OpenSSL installation (vcpkg, or a source build under
 tools\openssl-install).
@@ -17,7 +17,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$projectRoot = Split-Path -Parent $PSScriptRoot   # .../ObsidianGuard
+$projectRoot = Split-Path -Parent $PSScriptRoot   # .../Crypto
 $toolsRoot   = Join-Path $projectRoot "..\tools"  # .../tools
 
 if (-not (Test-Path $toolsRoot)) {
@@ -85,7 +85,7 @@ if ($LASTEXITCODE -ne 0) { throw "cmake build failed (exit $LASTEXITCODE)" }
 
 if ($Test) {
     Write-Host ""
-    Write-Host "Running the ObsidianGuard test suite (ctest)..."
+    Write-Host "Running the Crypto test suite (ctest)..."
     & ctest --test-dir $buildDir --output-on-failure
     if ($LASTEXITCODE -ne 0) { throw "ctest failed (exit $LASTEXITCODE)" }
 }

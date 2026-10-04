@@ -1,13 +1,13 @@
-// ObsidianGuard - examples/usage_example.cpp
+// Crypto - examples/usage_example.cpp
 //
-// End-to-end demonstration of every ObsidianGuard class:
+// End-to-end demonstration of every Crypto class:
 //   * Aes256      : key/nonce generation, encrypt, decrypt, tag tampering, AAD
 //   * Rsa4096     : key pair, OAEP encrypt/decrypt, PSS sign/verify, PEM keys
 //   * MlKem768    : key pair, KEM encapsulate/decapsulate
 //   * Hkdf/Sha256 : key derivation and hashing
 //   * PostQuantum : one-call hybrid encryption envelope
 //
-// The API is intentionally minimal: one header (obsidianguard.hpp), plain
+// The API is intentionally minimal: one header (Crypto.hpp), plain
 // int return codes (0 = ok, negative = kErr*), and negative tests that show
 // how each failure class surfaces as a distinct code.
 
@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "obsidianguard.hpp"
+#include "Crypto.hpp"
 
 namespace {
 
@@ -70,7 +70,7 @@ void printHex(const char* label, const std::vector<uint8_t>& bytes,
 }
 
 bool sha256(const std::vector<uint8_t>& message, std::vector<uint8_t>& digest) {
-    ObsidianGuard::EvpMdCtxPtr digestContext = ObsidianGuard::makeMdCtx();
+    Crypto::EvpMdCtxPtr digestContext = Crypto::makeMdCtx();
     if (!digestContext) {
         return false;
     }
@@ -91,7 +91,7 @@ bool sha256(const std::vector<uint8_t>& message, std::vector<uint8_t>& digest) {
 
 void testAes256Gcm() {
     std::cout << "== Class 1: AES-256-GCM ==\n";
-    ObsidianGuard::Aes256 module;
+    Crypto::Aes256 module;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     std::vector<uint8_t> key;
@@ -135,7 +135,7 @@ void testAes256Gcm() {
 
 void testRsa4096() {
     std::cout << "\n== Class 2: RSA-4096 ==\n";
-    ObsidianGuard::Rsa4096 module;
+    Crypto::Rsa4096 module;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     EVP_PKEY* rawKey = nullptr;
@@ -145,7 +145,7 @@ void testRsa4096() {
         return;
     }
     // RAII: ownership of the OpenSSL key is transferred to a unique_ptr.
-    ObsidianGuard::EvpPkeyPtr keyPair = ObsidianGuard::wrapPkey(rawKey);
+    Crypto::EvpPkeyPtr keyPair = Crypto::wrapPkey(rawKey);
 
     // --- OAEP encryption ---
     const std::string message = "RSA-4096 OAEP test message (64 bytes of payload data)!!!";
@@ -194,17 +194,17 @@ void testRsa4096() {
     report("savePrivateKeyPem", module.savePrivateKeyPem(keyPair.get(), privatePem));
     EVP_PKEY* loadedRaw = nullptr;
     report("loadPublicKeyPem", module.loadPublicKeyPem(publicPem, &loadedRaw));
-    ObsidianGuard::EvpPkeyPtr loadedKey = ObsidianGuard::wrapPkey(loadedRaw);
+    Crypto::EvpPkeyPtr loadedKey = Crypto::wrapPkey(loadedRaw);
     std::cout << "    public PEM: " << publicPem.size() << " chars\n";
     loadedRaw = nullptr;
     report("loadPrivateKeyPem", module.loadPrivateKeyPem(privatePem, &loadedRaw));
-    loadedKey = ObsidianGuard::wrapPkey(loadedRaw);
+    loadedKey = Crypto::wrapPkey(loadedRaw);
     std::cout << "    private PEM: " << privatePem.size() << " chars\n";
 }
 
 void testMlKem768() {
     std::cout << "\n== Class 3: ML-KEM-768 (post-quantum KEM) ==\n";
-    ObsidianGuard::MlKem768 module;
+    Crypto::MlKem768 module;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     std::vector<uint8_t> publicKey;
@@ -253,8 +253,8 @@ void testMlKem768() {
 
 void testHkdfAndSha() {
     std::cout << "\n== Class 4: HKDF + SHA-256 ==\n";
-    ObsidianGuard::Hkdf hkdf;
-    ObsidianGuard::Sha256 sha;
+    Crypto::Hkdf hkdf;
+    Crypto::Sha256 sha;
     std::cout << "  algorithmName(): " << hkdf.algorithmName() << "\n";
     std::cout << "  algorithmName(): " << sha.algorithmName() << "\n";
 
@@ -271,8 +271,8 @@ void testHkdfAndSha() {
 
 void testHybridEnvelope() {
     std::cout << "\n== Class 5: PostQuantum hybrid envelope ==\n";
-    ObsidianGuard::PostQuantum module;
-    ObsidianGuard::MlKem768 kem;
+    Crypto::PostQuantum module;
+    Crypto::MlKem768 kem;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     std::vector<uint8_t> publicKey;
@@ -315,7 +315,7 @@ void testHybridEnvelope() {
 
 int main() {
     std::cout << "============================================================\n";
-    std::cout << " ObsidianGuard usage example (C++17 + OpenSSL)\n";
+    std::cout << " Crypto usage example (C++17 + OpenSSL)\n";
     std::cout << " OpenSSL runtime version: " << OpenSSL_version(OPENSSL_VERSION) << "\n";
     std::cout << "============================================================\n\n";
 
