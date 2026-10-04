@@ -1,13 +1,15 @@
 // ObsidianGuard - examples/usage_example.cpp
 //
-// End-to-end demonstration of every ObsidianGuard module:
-//   * Aes256GcmModule : key/nonce generation, encrypt, decrypt, tag tampering
-//   * Rsa4096Module   : key pair, OAEP encrypt/decrypt, PSS sign/verify
-//   * MlKem768Module  : key pair, KEM encapsulate/decapsulate
+// End-to-end demonstration of every ObsidianGuard class:
+//   * Aes256      : key/nonce generation, encrypt, decrypt, tag tampering, AAD
+//   * Rsa4096     : key pair, OAEP encrypt/decrypt, PSS sign/verify, PEM keys
+//   * MlKem768    : key pair, KEM encapsulate/decapsulate
+//   * Hkdf/Sha256 : key derivation and hashing
+//   * PostQuantum : one-call hybrid encryption envelope
 //
-// Every call is checked through CryptoResult and, on failure, the stored
-// description is shown through getLastError(). Failures print the distinct
-// negative CryptoErrorCode category (e.g. -3 AuthFailed), not just -1.
+// The API is intentionally minimal: one header (obsidianguard.hpp), plain
+// int return codes (0 = ok, negative = kErr*), and negative tests that show
+// how each failure class surfaces as a distinct code.
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -19,48 +21,38 @@
 #include <string>
 #include <vector>
 
-#include "aes256_gcm.hpp"
-#include "crypto_module.hpp"
-#include "crypto_types.hpp"
-#include "ml_kem768.hpp"
-#include "openssl_raii.hpp"
-#include "rsa4096.hpp"
+#include "obsidianguard.hpp"
 
 namespace {
 
 int gFailureCount = 0;
 
 const char* codeName(int code) {
-    using ObsidianGuard::CryptoErrorCode;
-    switch (static_cast<CryptoErrorCode>(code)) {
-        case CryptoErrorCode::Success:         return "Success";
-        case CryptoErrorCode::InvalidArgument: return "InvalidArgument";
-        case CryptoErrorCode::OpenSslFailure:  return "OpenSslFailure";
-        case CryptoErrorCode::AuthFailed:      return "AuthFailed";
-        case CryptoErrorCode::Unavailable:     return "Unavailable";
-        case CryptoErrorCode::Internal:        return "Internal";
+    switch (code) {
+        case 0:  return "Ok";
+        case -1: return "InvalidArgument";
+        case -2: return "OpenSslFailure";
+        case -3: return "AuthFailed";
+        case -4: return "Unavailable";
+        case -5: return "Internal";
+        case -6: return "ErrFile";
     }
     return "Unknown";
 }
 
-void report(const char* label, const ObsidianGuard::CryptoResult& result) {
+void report(const char* label, int rc) {
     std::cout << "  [";
-    if (result.ok()) {
+    if (rc == 0) {
         std::cout << " OK ] ";
     } else {
         ++gFailureCount;
         std::cout << "FAIL] ";
     }
     std::cout << label;
-    if (!result.ok()) {
-        std::cout << " -> code " << result.code << " (" << codeName(result.code)
-                  << "): " << result.message;
+    if (rc != 0) {
+        std::cout << " -> code " << rc << " (" << codeName(rc) << ")";
     }
     std::cout << '\n';
-}
-
-void showLastError(const ObsidianGuard::ICryptoModule& module) {
-    std::cout << "        getLastError(): \"" << module.getLastError() << "\"\n";
 }
 
 void printHex(const char* label, const std::vector<uint8_t>& bytes,
@@ -98,8 +90,8 @@ bool sha256(const std::vector<uint8_t>& message, std::vector<uint8_t>& digest) {
 }
 
 void testAes256Gcm() {
-    std::cout << "== Module 1: AES-256-GCM ==\n";
-    ObsidianGuard::Aes256GcmModule module;
+    std::cout << "== Class 1: AES-256-GCM ==\n";
+    ObsidianGuard::Aes256 module;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     std::vector<uint8_t> key;
@@ -131,24 +123,19 @@ void testAes256Gcm() {
     std::cout << "  Negative test (corrupted tag, failure expected):\n";
     std::vector<uint8_t> corruptedTag(tag.begin(), tag.end());
     corruptedTag[0] ^= 0xFFu;
-    const ObsidianGuard::CryptoResult result =
-        module.decrypt(ciphertext, key, nonce, corruptedTag, decrypted);
-    if (result.ok()) {
+    const int rc = module.decrypt(ciphertext, key, nonce, corruptedTag, decrypted);
+    if (rc == 0) {
         ++gFailureCount;
         std::cout << "  [FAIL] decryption accepted a corrupted tag\n";
     } else {
-        std::cout << "  [ OK ] decryption correctly rejected, code " << result.code
-                  << " (" << codeName(result.code) << "): " << result.message << "\n";
-        showLastError(module);
+        std::cout << "  [ OK ] decryption correctly rejected, code " << rc << " ("
+                  << codeName(rc) << ")\n";
     }
-    module.clearError();
-    std::cout << "  after clearError(): getLastError() -> \""
-              << module.getLastError() << "\"\n";
 }
 
 void testRsa4096() {
-    std::cout << "\n== Module 2: RSA-4096 ==\n";
-    ObsidianGuard::Rsa4096Module module;
+    std::cout << "\n== Class 2: RSA-4096 ==\n";
+    ObsidianGuard::Rsa4096 module;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     EVP_PKEY* rawKey = nullptr;
@@ -191,22 +178,33 @@ void testRsa4096() {
     std::cout << "  Negative test (corrupted signature, failure expected):\n";
     std::vector<uint8_t> corruptedSignature = signature;
     corruptedSignature[corruptedSignature.size() / 2] ^= 0x01u;
-    const ObsidianGuard::CryptoResult result =
-        module.verify(keyPair.get(), digest, corruptedSignature);
-    if (result.ok()) {
+    const int rc = module.verify(keyPair.get(), digest, corruptedSignature);
+    if (rc == 0) {
         ++gFailureCount;
         std::cout << "  [FAIL] verification accepted a corrupted signature\n";
     } else {
-        std::cout << "  [ OK ] verification correctly rejected, code " << result.code
-                  << " (" << codeName(result.code) << "): " << result.message << "\n";
-        showLastError(module);
+        std::cout << "  [ OK ] verification correctly rejected, code " << rc << " ("
+                  << codeName(rc) << ")\n";
     }
-    module.clearError();
+
+    // --- key persistence (PEM) ---
+    std::string publicPem;
+    std::string privatePem;
+    report("savePublicKeyPem", module.savePublicKeyPem(keyPair.get(), publicPem));
+    report("savePrivateKeyPem", module.savePrivateKeyPem(keyPair.get(), privatePem));
+    EVP_PKEY* loadedRaw = nullptr;
+    report("loadPublicKeyPem", module.loadPublicKeyPem(publicPem, &loadedRaw));
+    ObsidianGuard::EvpPkeyPtr loadedKey = ObsidianGuard::wrapPkey(loadedRaw);
+    std::cout << "    public PEM: " << publicPem.size() << " chars\n";
+    loadedRaw = nullptr;
+    report("loadPrivateKeyPem", module.loadPrivateKeyPem(privatePem, &loadedRaw));
+    loadedKey = ObsidianGuard::wrapPkey(loadedRaw);
+    std::cout << "    private PEM: " << privatePem.size() << " chars\n";
 }
 
 void testMlKem768() {
-    std::cout << "\n== Module 3: ML-KEM-768 (post-quantum KEM) ==\n";
-    ObsidianGuard::MlKem768Module module;
+    std::cout << "\n== Class 3: ML-KEM-768 (post-quantum KEM) ==\n";
+    ObsidianGuard::MlKem768 module;
     std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
 
     std::vector<uint8_t> publicKey;
@@ -218,9 +216,6 @@ void testMlKem768() {
     report("generateKeyPair", module.generateKeyPair(publicKey, secretKey));
     if (publicKey.empty()) {
         std::cout << "  (skipping the remaining ML-KEM tests: no key material)\n";
-        if (!module.getLastError().empty()) {
-            showLastError(module);
-        }
         return;
     }
     std::cout << "    public key: " << publicKey.size()
@@ -244,17 +239,75 @@ void testMlKem768() {
     std::vector<uint8_t> corruptedCiphertext = ciphertext;
     corruptedCiphertext[0] ^= 0xFFu;
     std::vector<uint8_t> rejectedSecret;
-    const ObsidianGuard::CryptoResult result =
-        module.decapsulate(corruptedCiphertext, secretKey, rejectedSecret);
-    if (!result.ok()) {
+    const int rc = module.decapsulate(corruptedCiphertext, secretKey, rejectedSecret);
+    if (rc != 0) {
         std::cout << "  [ OK ] decapsulation rejected the ciphertext, code "
-                  << result.code << " (" << codeName(result.code) << "): "
-                  << result.message << "\n";
+                  << rc << " (" << codeName(rc) << ")\n";
     } else if (rejectedSecret == sharedSecretA) {
         ++gFailureCount;
         std::cout << "  [FAIL] tampered ciphertext yielded the original shared secret\n";
     } else {
         std::cout << "  [ OK ] implicit rejection: different secret, no error surfaced\n";
+    }
+}
+
+void testHkdfAndSha() {
+    std::cout << "\n== Class 4: HKDF + SHA-256 ==\n";
+    ObsidianGuard::Hkdf hkdf;
+    ObsidianGuard::Sha256 sha;
+    std::cout << "  algorithmName(): " << hkdf.algorithmName() << "\n";
+    std::cout << "  algorithmName(): " << sha.algorithmName() << "\n";
+
+    const std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};
+    std::vector<uint8_t> digest;
+    report("sha256(\"hello\")", sha.hash(message, digest));
+    printHex("digest", digest);
+
+    std::vector<uint8_t> derived;
+    report("hkdf.derive(32 bytes)", hkdf.derive(message, std::vector<uint8_t>(),
+                                                std::vector<uint8_t>(), 32, derived));
+    printHex("derived key", derived);
+}
+
+void testHybridEnvelope() {
+    std::cout << "\n== Class 5: PostQuantum hybrid envelope ==\n";
+    ObsidianGuard::PostQuantum module;
+    ObsidianGuard::MlKem768 kem;
+    std::cout << "  algorithmName(): " << module.algorithmName() << "\n";
+
+    std::vector<uint8_t> publicKey;
+    std::vector<uint8_t> secretKey;
+    report("generateKeyPair", kem.generateKeyPair(publicKey, secretKey));
+    if (publicKey.empty()) {
+        std::cout << "  (skipping the hybrid tests: no key material)\n";
+        return;
+    }
+
+    const std::string message = "A hybrid-encrypted message, one call";
+    const std::vector<uint8_t> plaintext(message.begin(), message.end());
+    std::vector<uint8_t> envelope;
+    std::vector<uint8_t> decrypted;
+    report("encrypt (seal)", module.encrypt(publicKey, plaintext, envelope));
+    printHex("envelope", envelope, 24);
+    report("decrypt (open)", module.decrypt(secretKey, envelope, decrypted));
+    if (decrypted == plaintext) {
+        std::cout << "  [ OK ] hybrid round-trip: message recovered exactly\n";
+    } else {
+        ++gFailureCount;
+        std::cout << "  [FAIL] hybrid round-trip: message mismatch\n";
+    }
+
+    // Negative test: tamper one byte of the envelope -> decryption must fail.
+    std::cout << "  Negative test (tampered envelope, failure expected):\n";
+    std::vector<uint8_t> tampered = envelope;
+    tampered[tampered.size() - 1] ^= 0xFFu;
+    const int rc = module.decrypt(secretKey, tampered, decrypted);
+    if (rc == 0) {
+        ++gFailureCount;
+        std::cout << "  [FAIL] decryption accepted a tampered envelope\n";
+    } else {
+        std::cout << "  [ OK ] decryption correctly rejected, code " << rc << " ("
+                  << codeName(rc) << ")\n";
     }
 }
 
@@ -269,6 +322,8 @@ int main() {
     testAes256Gcm();
     testRsa4096();
     testMlKem768();
+    testHkdfAndSha();
+    testHybridEnvelope();
 
     std::cout << "\n============================================================\n";
     if (gFailureCount == 0) {
