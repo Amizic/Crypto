@@ -37,9 +37,12 @@ find_package(OpenSSL 3.5 REQUIRED)
 # Library
 # ---------------------------------------------------------------------------
 add_library(ObsidianGuard
-    src/aes256_gcm.cpp
-    src/rsa4096.cpp
-    src/ml_kem768.cpp
+    src/Aes256.cpp
+    src/Rsa4096.cpp
+    src/MlKem768.cpp
+    src/Hkdf.cpp
+    src/Sha256.cpp
+    src/PostQuantum.cpp
 )
 
 target_include_directories(ObsidianGuard PUBLIC
@@ -55,9 +58,14 @@ if(MINGW)
     target_link_libraries(ObsidianGuard PUBLIC ws2_32 gdi32 crypt32)
 endif()
 
-target_compile_definitions(ObsidianGuard PRIVATE OBSIDIAN_GUARD_EXPORTS)
+# Import/export semantics (ObsidianGuardLite convention):
+#   * shared build  -> the library's own TUs export (OBSIDIAN_GUARD_EXPORTS),
+#                      consumers implicitly dllimport
+#   * static build  -> OBSIDIAN_GUARD_STATIC is public, so no declspec at all
 if(BUILD_SHARED_LIBS)
-    target_compile_definitions(ObsidianGuard PUBLIC OBSIDIAN_GUARD_SHARED)
+    target_compile_definitions(ObsidianGuard PRIVATE OBSIDIAN_GUARD_EXPORTS)
+else()
+    target_compile_definitions(ObsidianGuard PUBLIC OBSIDIAN_GUARD_STATIC)
 endif()
 if(OBSIDIAN_GUARD_OPENSSL_STATIC)
     target_compile_definitions(ObsidianGuard PUBLIC OPENSSL_STATIC)
@@ -115,6 +123,13 @@ if(OBSIDIAN_GUARD_BUILD_EXAMPLES)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
     obsidianguard_copy_mingw_runtime(usage_example)
+
+    add_executable(quickstart examples/quickstart.cpp)
+    target_link_libraries(quickstart PRIVATE ObsidianGuard)
+    set_target_properties(quickstart PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    obsidianguard_copy_mingw_runtime(quickstart)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -122,18 +137,18 @@ endif()
 # ---------------------------------------------------------------------------
 include(CTest)
 if(OBSIDIAN_GUARD_BUILD_TESTS AND BUILD_TESTING)
-    add_executable(obsidianguard_tests tests/test_main.cpp)
-    target_link_libraries(obsidianguard_tests PRIVATE ObsidianGuard)
-    set_target_properties(obsidianguard_tests PROPERTIES
+    add_executable(ObsidianGuard_tests tests/test_main.cpp)
+    target_link_libraries(ObsidianGuard_tests PRIVATE ObsidianGuard)
+    set_target_properties(ObsidianGuard_tests PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
-    obsidianguard_copy_mingw_runtime(obsidianguard_tests)
+    obsidianguard_copy_mingw_runtime(ObsidianGuard_tests)
 
-    add_test(NAME ObsidianGuardTests COMMAND obsidianguard_tests)
+    add_test(NAME ObsidianGuard_tests COMMAND ObsidianGuard_tests)
     # RSA-4096 key generation is intentionally slow; be generous on CI.
     # The test binary pauses at the end when run interactively; disable the
     # pause under CTest so automated runs never wait for a keypress.
-    set_tests_properties(ObsidianGuardTests PROPERTIES
+    set_tests_properties(ObsidianGuard_tests PROPERTIES
         TIMEOUT 600
         ENVIRONMENT "OBSIDIAN_GUARD_NO_PAUSE=1"
     )

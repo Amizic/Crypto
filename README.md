@@ -1,53 +1,97 @@
 # ObsidianGuard
 
-A professional, modular C++17 cryptography library built on OpenSSL.
-Three modules share one interface and one error model:
+A small, stateless, C++17 cryptography library built on OpenSSL. Six
+classes, one error model:
 
-| Module | Algorithm | Typical use |
+| Class | Algorithm | Typical use |
 |---|---|---|
-| `Aes256GcmModule` | AES-256-GCM (`EVP_aes_256_gcm`) | Authenticated symmetric encryption |
-| `Rsa4096Module` | RSA-4096, OAEP-SHA256 / PSS-SHA256 | Asymmetric encryption and digital signatures |
-| `MlKem768Module` | ML-KEM-768 (FIPS 203, post-quantum) | Key encapsulation (requires OpenSSL 3.5+) |
+| `Aes256` | AES-256-GCM (`EVP_aes_256_gcm`), optional AAD | Authenticated symmetric encryption |
+| `Rsa4096` | RSA-4096, OAEP-SHA256 / PSS-SHA256, PEM/DER key persistence | Asymmetric encryption and digital signatures |
+| `MlKem768` | ML-KEM-768 (FIPS 203, post-quantum) | Key encapsulation (requires OpenSSL 3.5+) |
+| `Hkdf` | HKDF-SHA256 (RFC 5869) | Key derivation from shared secrets / master keys |
+| `Sha256` | SHA-256 / SHA-512 | One-shot hashing |
+| `PostQuantum` | ML-KEM-768 + HKDF-SHA256 + AES-256-GCM | One-call hybrid encryption |
+
+## ObsidianGuard vs ObsidianGuardLite
+
+This workspace ships two related libraries. Both implement the same
+algorithms (AES-256-GCM, RSA-4096, ML-KEM-768) with aligned return codes and
+naming, but with different key-ownership models — pick per project:
+
+| | **ObsidianGuard (this one)** | **ObsidianGuardLite** |
+|---|---|---|
+| Model | **Stateless engine** — classes hold nothing; keys are byte vectors / `EVP_PKEY*` you pass per call | **Key-owning objects** — each object stores its key inside itself |
+| Locks | none — thread-safe by construction | internal mutex per object (uncontended in per-client use) |
+| Key storage | wherever *your* code keeps it (e.g. a per-client session struct) | inside the object (non-copyable); PEM save/load to files |
+| Best for | servers with many clients/threads, pinned cores, custom session management, maximum throughput | small tools and apps that want self-contained per-client objects |
+
+Use **ObsidianGuard** when your application owns the key lifecycle and wants
+a zero-lock, zero-state engine; use **ObsidianGuardLite** when you prefer
+each object to carry its key and save/load itself. Both are thread-safe and
+covered by the same style of test suites.
 
 ## Design
 
-* **Common interface** — every module implements `ICryptoModule`:
-  `algorithmName()`, `getLastError()`, `clearError()`.
-* **No exceptions, no printing, no abort** — every public method returns
-  `CryptoResult { int code; std::string message; bool ok(); }` where `0`
-  means success and negative values mean failure.
-* **Distinct error codes** — every failure carries one of the standard
-  `CryptoErrorCode` categories below, so callers can tell failure classes
-  apart without parsing message text:
+* **Plain `int` return codes, nothing else** — every public method returns
+  `0` on success or a negative error code on failure. No result structs, no
+  message strings; the code *is* the error. The same constants are exposed
+  as `static constexpr int` members on **every class** (ObsidianGuardLite
+  convention), so you can write readable checks:
 
-  | `CryptoErrorCode` | Value | Meaning |
+  | Constant | Value | Meaning |
   |---|---|---|
-  | `Success` | `0` | no error |
-  | `InvalidArgument` | `-1` | bad input (wrong size, null key, empty buffer, ...) |
-  | `OpenSslFailure` | `-2` | the underlying OpenSSL call failed |
-  | `AuthFailed` | `-3` | authentication/verification failed (wrong key, nonce (IV), tag or signature) |
-  | `Unavailable` | `-4` | the algorithm is not available in this OpenSSL build |
-  | `Internal` | `-5` | unexpected internal failure (reserved) |
+  | `kOk` | `0` | success |
+  | `kErrInvalidArgument` | `-1` | bad input (wrong size, null key, empty buffer, ...) |
+  | `kErrOpenSsl` | `-2` | the underlying OpenSSL call failed |
+  | `kErrAuth` | `-3` | authentication/verification failed (wrong key, nonce (IV), tag or signature) |
+  | `kErrUnavailable` | `-4` | the algorithm is not available in this OpenSSL build |
+  | `kErrInternal` | `-5` | unexpected internal failure (reserved) |
+  | `kErrFile` | `-6` | file I/O error (parity with ObsidianGuardLite; unused here) |
 
-  For example, AES-GCM decryption reports `-1` for a wrong key *size*,
-  `-3` when the tag/ciphertext was tampered with, and RSA verification
-  reports `-3` for a bad signature while unparseable ciphertext yields
-  `-2` — different causes, different codes.
-* **Thread-safe module instances** — all crypto work happens on per-call,
-  thread-local state, so a single module instance can be shared freely
-  between threads. The stored last error is guarded internally and
-  `getLastError()` returns a consistent snapshot by value; concurrent
-  failures are resolved last-writer-wins, while the `CryptoResult` returned
-  by each call is always the exact result of that call.
-* **OpenSSL errors** — every OpenSSL failure is translated into
-  `CryptoResult::failure` with the human readable description from
-  `ERR_error_string(ERR_get_error(), nullptr)` and is also stored in the
-  module's `lastError_` (visible via `getLastError()`).
-* **RAII everywhere** — `EVP_CIPHER_CTX`, `EVP_MD_CTX`, `EVP_PKEY_CTX` and
+  ```cpp
+  int rc = aes.decrypt(cipher, key, iv, tag, plain);
+  if (rc != 0) { /* failed */ }
+  if (rc == ObsidianGuard::Aes256::kErrAuth) { /* tampered data */ }
+  ```
+
+  For example, AES-GCM decryption reports `kErrInvalidArgument` for a wrong
+  key *size*, `kErrAuth` when the tag/ciphertext/AAD was tampered with, and
+  RSA verification reports `kErrAuth` for a bad signature while unparseable
+  ciphertext yields `kErrOpenSsl` — different causes, different codes.
+* **Stateless classes, trivially thread-safe** — the classes hold no state
+  at all (keys are passed in per call), so any number of threads may share
+  one instance — or use one instance per client/core — with zero locking and
+  zero contention. All crypto work happens on per-call, thread-local OpenSSL
+  state.
+* **No exceptions, no printing, no abort** — every method is `noexcept` and
+  reports everything through its return code.
+* **One include** — `#include "obsidianguard.hpp"` brings in all six classes.
+* **AAD support** — `Aes256` has encrypt/decrypt overloads that bind
+  associated data (headers, IDs, metadata) into the GCM tag: it is
+  authenticated but not encrypted, and any tampering with it is detected.
+* **RAII** — internally, `EVP_CIPHER_CTX`, `EVP_MD_CTX`, `EVP_PKEY_CTX` and
   `EVP_PKEY` are owned by `std::unique_ptr` wrappers centralized in
-  [`include/openssl_raii.hpp`](include/openssl_raii.hpp).
+  [`include/OpensslRaii.hpp`](include/OpensslRaii.hpp); no manual frees
+  exist anywhere.
 * **C++17** — `const std::vector<uint8_t>&` buffers everywhere (no
-  `std::span`), all methods `noexcept` where possible, no `goto`.
+  `std::span`), `noexcept`, no `goto`.
+
+Typical call:
+
+```cpp
+#include "obsidianguard.hpp"
+
+ObsidianGuard::Aes256 aes;
+std::vector<uint8_t> key, iv, ciphertext, plaintext;
+std::array<uint8_t, 16> tag;
+
+int rc = aes.generateKey(key);                       // 0 = ok
+if (rc != 0) { /* handle failure */ }
+
+rc = aes.encrypt(plaintext, key, iv, ciphertext, tag);
+rc = aes.decrypt(ciphertext, key, iv,
+                 std::vector<uint8_t>(tag.begin(), tag.end()), plaintext);
+```
 
 ## Building
 
@@ -74,12 +118,13 @@ run the tests right after: `pwsh -ExecutionPolicy Bypass -File scripts/build.ps1
 standard `BUILD_SHARED_LIBS` variable (ON by default) selects shared vs
 static linking.
 
-The example executable is built automatically
-(`examples/usage_example.cpp`) and lands in `build-*/bin/` next to the
-library. Run it to exercise all three modules: key generation, encrypt,
-decrypt, sign, verify, KEM encapsulate/decapsulate, plus negative tests that
-show how failures surface through `CryptoResult` and `getLastError()`. It
-ends with `system("pause")` on Windows so the output stays visible.
+The example executables are built automatically (`examples/usage_example.cpp`
+and `examples/quickstart.cpp`) and land in `build-*/bin/` next to the
+library. Run them to exercise every class: key generation, encrypt, decrypt,
+sign, verify, KEM encapsulate/decapsulate, HKDF/SHA-256, RSA key
+persistence, the hybrid envelope, and a simulated handshake + 5-message
+session, plus negative tests that show how each failure class surfaces as a
+distinct code.
 
 The test suite (`tests/test_main.cpp`, no external test framework) is built
 and registered with CTest as well:
@@ -90,12 +135,12 @@ ctest --test-dir build-static --output-on-failure     # static build
 ```
 
 It covers round trips, every negative path with its exact error code, the
-error-model contract, and multithreaded stress tests that hammer a single
-shared module instance from several threads. When you run
-`obsidianguard_tests.exe` directly in a terminal (or double-click it), it
-pauses at the end so the window stays open while you read the results;
-CTest and redirected runs skip the pause automatically, and setting
-`OBSIDIAN_GUARD_NO_PAUSE=1` forces it off.
+error-model contract, known-answer vectors (RFC 5869 HKDF, SHA-256/512), and
+multithreaded stress tests that hammer a single shared instance from several
+threads. When you run `ObsidianGuard_tests.exe` directly in a terminal (or
+double-click it), it pauses at the end so the window stays open while you
+read the results; CTest and redirected runs skip the pause automatically,
+and setting `OBSIDIAN_GUARD_NO_PAUSE=1` forces it off.
 
 ## Getting OpenSSL 3.5+
 
@@ -129,7 +174,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 | Option | Default | Meaning |
 |---|---|---|
 | `BUILD_SHARED_LIBS` | `ON` | Shared library (`OFF` = static library) |
-| `OBSIDIAN_GUARD_BUILD_EXAMPLES` | `ON` | Build `examples/usage_example.cpp` |
+| `OBSIDIAN_GUARD_BUILD_EXAMPLES` | `ON` | Build `examples/usage_example.cpp` and `examples/quickstart.cpp` |
 | `OBSIDIAN_GUARD_BUILD_TESTS` | `ON` | Build `tests/test_main.cpp` and register it with CTest |
 | `OBSIDIAN_GUARD_OPENSSL_STATIC` | `ON` | Define `OPENSSL_STATIC` (needed when OpenSSL is a static library, e.g. vcpkg static triplets) |
 
@@ -139,19 +184,24 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 ObsidianGuard/
 ├── CMakeLists.txt
 ├── include/
-│   ├── crypto_types.hpp    # CryptoResult + OBSIDIAN_GUARD_API export macro
-│   ├── crypto_module.hpp   # ICryptoModule interface
-│   ├── openssl_raii.hpp    # centralized RAII wrappers for OpenSSL resources
-│   ├── aes256_gcm.hpp
-│   ├── rsa4096.hpp
-│   └── ml_kem768.hpp
+│   ├── obsidianguard.hpp   # single-include convenience header
+│   ├── Aes256.hpp
+│   ├── Rsa4096.hpp
+│   ├── MlKem768.hpp
+│   ├── Hkdf.hpp
+│   ├── Sha256.hpp
+│   ├── PostQuantum.hpp
+│   └── OpensslRaii.hpp     # RAII wrappers for OpenSSL resources
 ├── src/
-│   ├── error_utils.hpp     # internal error translation helpers (not installed)
-│   ├── aes256_gcm.cpp
-│   ├── rsa4096.cpp
-│   └── ml_kem768.cpp
+│   ├── Aes256.cpp
+│   ├── Rsa4096.cpp
+│   ├── MlKem768.cpp
+│   ├── Hkdf.cpp
+│   ├── Sha256.cpp
+│   └── PostQuantum.cpp
 ├── examples/
-│   └── usage_example.cpp
+│   ├── usage_example.cpp
+│   └── quickstart.cpp
 ├── tests/
 │   └── test_main.cpp        # dependency-free test suite (CTest)
 ├── cmake/
@@ -163,13 +213,22 @@ ObsidianGuard/
 
 ## Notes
 
-* ML-KEM-768 requires OpenSSL 3.5+; without it every `MlKem768Module` call
-  fails with `CryptoResult::failure(-4, "ML-KEM not available. Requires
-  OpenSSL 3.5+.")` (`CryptoErrorCode::Unavailable`) — the library still
-  builds and runs on older OpenSSL.
-* Keys exchanged with `Rsa4096Module::generateKeyPair()` are returned as
-  `EVP_PKEY*` owned by the caller; wrap them with
-  `ObsidianGuard::wrapPkey()` (`include/openssl_raii.hpp`) for automatic
-  cleanup with `EVP_PKEY_free()`.
-* ML-KEM key material is exchanged as DER (`i2d_PUBKEY` /
-  `i2d_PrivateKey`), so no OpenSSL pointer ever crosses the API boundary.
+* **Nonce discipline** — `Aes256` takes the nonce (IV) as a parameter:
+  generate a fresh one per message with `generateIv()`. The auto-nonce
+  convenience overloads `encrypt(plaintext, key, ciphertext)` /
+  `decrypt(ciphertext, key, plaintext)` generate the IV internally (output
+  layout `[IV][ciphertext][tag]`), so it can never be reused. Never reuse an
+  IV with the same key. With random 96-bit IVs the collision risk becomes
+  meaningful only after ~2³² messages under one key — rotate keys at extreme
+  volume.
+* ML-KEM-768 requires OpenSSL 3.5+; without it every `MlKem768` call fails
+  with `kErrUnavailable` (`-4`) — the library still builds and runs on older
+  OpenSSL.
+* Keys from `Rsa4096::generateKeyPair()` are returned as `EVP_PKEY*` owned by
+  the caller; wrap them with `ObsidianGuard::wrapPkey()`
+  (`include/OpensslRaii.hpp`) for automatic cleanup with `EVP_PKEY_free()`.
+* ML-KEM key material is exchanged as DER (`i2d_PUBKEY` / `i2d_PrivateKey`),
+  so no OpenSSL pointer ever crosses the API boundary.
+* `PostQuantum::encrypt()` / `decrypt()` is the one-call version of the
+  classic hybrid handshake: ML-KEM encapsulate → HKDF → AES-GCM with the KEM
+  ciphertext bound as AAD, so the whole envelope is authenticated.
