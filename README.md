@@ -1,5 +1,8 @@
 # Crypto
 
+> **Disclaimer:** This project was developed with the help of AI. All code
+> has been tested and verified by me.
+
 A small, stateless, C++17 cryptography library built on OpenSSL. Six
 classes, one error model. One include brings in everything:
 
